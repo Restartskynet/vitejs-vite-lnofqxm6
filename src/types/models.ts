@@ -1,6 +1,6 @@
 export type FillSide = "BUY" | "SELL";
 
-export type WarningLevel = "error" | "warning" | "info";
+export type ImportWarningLevel = "info" | "warn" | "warning" | "error";
 
 export interface ImportWarning {
   level: WarningLevel;

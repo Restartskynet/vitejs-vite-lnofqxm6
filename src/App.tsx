@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import "./index.css";
 
-import type { DailyRow, StrategyConfig, Trade, RiskState, ImportWarning } from "./types/models";
+import type { DailyRow, StrategyConfig, Trade, RiskState } from "./types/models";
+import type { ImportWarning } from "./importers/webullOrdersImporter";
 
 import { importWebullOrdersCsv } from "./importers/webullOrdersImporter";
 import { buildPositionSessions } from "./engine/positionSessions";
@@ -55,14 +56,23 @@ export default function App() {
     const imp = importWebullOrdersCsv(text);
     const built = buildPositionSessions(imp.fills);
 
+    const asWarn = (w: string | ImportWarning): ImportWarning => {
+      if (typeof w === "string") return { level: "warn", message: w };
+      return w;
+    };
+    
     const nextWarnings: ImportWarning[] = [
-      ...imp.warnings,
-      ...built.warnings,
+      ...(imp.warnings ?? []).map(asWarn),
+      ...(built.warnings ?? []).map(asWarn),
       {
         level: "info",
-        message: `Rows: ${imp.stats.totalRows} • Filled: ${imp.stats.filledRows} • Used fills: ${imp.stats.usedRows} • Built trades: ${built.trades.length}`,
+        message: `Rows: ${imp.stats.totalRows} • Filled: ${imp.stats.filledRows} • Used: ${imp.stats.usedRows}`,
       },
     ];
+    
+    
+    setWarnings(nextWarnings);
+    
 
     setWarnings(nextWarnings);
     setTrades(built.trades);
