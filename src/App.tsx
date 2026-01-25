@@ -142,6 +142,12 @@ export default function App() {
         </div>
 
         <TradesTable trades={trades} />
+        <DashboardLayout>
+        {/* Your existing components with new styling classes */}
+        <HeroRiskPanel risk={risk} cfg={STRATEGY} />
+        <KpiCards metrics={metrics} />
+        {/* etc */}
+        </DashboardLayout>
       </div>
     </div>
   );
