@@ -12,85 +12,71 @@ export function HeroRiskPanel({
   cfg: StrategyConfig;
 }) {
   const mode = risk.mode;
-  const expl = explainMode(risk, cfg);
+  const theme = mode === "HIGH" ? "destructive" : "secondary";
+  const e = explainMode(risk, cfg);
+
+  const nextWinLabel = risk.tomorrowIfWinRiskPct === cfg.highRiskPct ? "HIGH" : "LOW";
+  const nextLossLabel = risk.tomorrowIfLossRiskPct === cfg.highRiskPct ? "HIGH" : "LOW";
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>2) Restart Throttle Output</CardTitle>
-          <div className="text-sm text-muted-foreground mt-1">
-            As-of last closed trade:{" "}
-            <span className="font-medium">
-              {risk.asOfCloseDate ?? "—"}
-            </span>
-          </div>
-        </div>
-        <Badge variant={mode === "HIGH" ? "default" : "secondary"}>
-          {mode}
-        </Badge>
+    <Card className="rounded-2xl">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span>Pre-Market Risk Output</span>
+          <Badge variant={theme} className="text-sm">
+            {mode}
+          </Badge>
+        </CardTitle>
       </CardHeader>
-
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Equity (as-of close)</div>
-            <div className="text-lg font-semibold mt-1">
-              {fmtMoney(risk.equityAsOfClose)}
-            </div>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border bg-white p-3">
+            <div className="text-xs text-slate-500">Risk % to use</div>
+            <div className="text-xl font-semibold">{fmtPct(risk.todayRiskPct)}</div>
           </div>
-
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Risk % (next trade)</div>
-            <div className="text-lg font-semibold mt-1">
-              {fmtPct(risk.todayRiskPct)}
-            </div>
+          <div className="rounded-xl border bg-white p-3">
+            <div className="text-xs text-slate-500">Allowed $ risk</div>
+            <div className="text-xl font-semibold">{fmtMoney(risk.allowedRiskDollars)}</div>
           </div>
+        </div>
 
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Allowed risk dollars</div>
-            <div className="text-lg font-semibold mt-1">
-              {fmtMoney(risk.allowedRiskDollars)}
+        <div className="rounded-xl border bg-white p-3">
+          <div className="text-xs text-slate-500">As of</div>
+          <div className="text-sm font-medium text-slate-900">
+            {risk.asOfCloseDate ? `Last closed trade: ${risk.asOfCloseDate}` : "No closed trades yet"}
+          </div>
+          <div className="text-xs text-slate-500">
+            Today: {risk.todayDate} • Next business day: {risk.tomorrowDate}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-3">
+          <div className="text-xs text-slate-500">Forecast (based on your next trade)</div>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <div className="rounded-lg border bg-slate-50 p-2">
+              <div className="text-xs text-slate-500">If next trade is WIN</div>
+              <div className="text-sm font-semibold">
+                {nextWinLabel} ({fmtPct(risk.tomorrowIfWinRiskPct)})
+              </div>
+            </div>
+            <div className="rounded-lg border bg-slate-50 p-2">
+              <div className="text-xs text-slate-500">If next trade is LOSS</div>
+              <div className="text-sm font-semibold">
+                {nextLossLabel} ({fmtPct(risk.tomorrowIfLossRiskPct)})
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border p-4 space-y-2">
-          <div className="font-semibold">{expl.title}</div>
-          <div className="text-sm text-muted-foreground">{expl.subtitle}</div>
-          <ul className="list-disc pl-5 text-sm space-y-1">
-            {expl.bullets.map((b, i) => (
+        <div className="rounded-xl border bg-white p-3">
+          <div className="text-sm font-semibold text-slate-900">{e.title}</div>
+          <div className="text-xs text-slate-500">{e.subtitle}</div>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-800">
+            {e.bullets.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
           </ul>
-          <div className="text-xs text-muted-foreground pt-2">{expl.footer}</div>
-        </div>
-
-        <div className="rounded-lg border p-4">
-          <div className="font-semibold mb-2">Forecast (state machine)</div>
-          <div className="text-sm text-muted-foreground mb-3">
-            This is purely the throttle logic: “what mode/risk% would you be in after the next trade result?”
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Base (no next trade yet)</div>
-              <div className="text-base font-semibold mt-1">{fmtPct(risk.tomorrowBaseRiskPct)}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">If next trade is a WIN</div>
-              <div className="text-base font-semibold mt-1">{fmtPct(risk.tomorrowIfWinRiskPct)}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">If next trade is a LOSS</div>
-              <div className="text-base font-semibold mt-1">{fmtPct(risk.tomorrowIfLossRiskPct)}</div>
-            </div>
-          </div>
-
-          <div className="text-xs text-muted-foreground mt-3">
-            Market date: <span className="font-medium">{risk.todayDate}</span> →{" "}
-            <span className="font-medium">{risk.tomorrowDate}</span>
-          </div>
+          <div className="mt-2 text-xs text-slate-500">{e.footer}</div>
         </div>
       </CardContent>
     </Card>

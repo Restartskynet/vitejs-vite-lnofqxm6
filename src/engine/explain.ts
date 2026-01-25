@@ -14,43 +14,47 @@ export function explainMode(
   const equity = fmtMoney(risk.equityAsOfClose);
 
   const lossesToDrop = Math.max(1, Math.floor(cfg.highLossesNeeded));
-  const winsToRecover = Math.max(1, Math.floor(cfg.lowWinsNeeded));
+  const winsToReturn = Math.max(1, Math.floor(cfg.lowWinsNeeded));
 
   if (risk.mode === "HIGH") {
-    const dropLine =
+    const lossLine =
       lossesToDrop === 1
-        ? "A single losing trade drops you to LOW."
+        ? "One losing trade drops you to LOW."
         : `${lossesToDrop} consecutive losing trades drop you to LOW.`;
 
-    const baseReason =
+    const reason =
       risk.asOfCloseDate == null
-        ? "No completed trades yet — strategy defaults to HIGH."
-        : "Mode is HIGH as-of the most recent closed trade.";
+        ? "No completed trades yet — the strategy defaults to HIGH."
+        : "Mode is HIGH based on your most recent closed trade(s).";
 
     return {
       title: "HIGH mode",
-      subtitle: "Full risk allowed (Restart throttle).",
+      subtitle: "Use your full risk allocation.",
       bullets: [
-        baseReason,
-        dropLine,
-        `Allowed risk right now: ${allowed} (equity ${equity}).`,
+        `Risk today: ${(cfg.highRiskPct * 100).toFixed(2)}% of equity (${allowed}).`,
+        lossLine,
+        "Wins in HIGH do not change the mode.",
+        `Equity used: ${equity} (starting equity + realized P&L as of last closed trade).`,
+        reason,
       ],
-      footer: "Breakeven trades (P&L = 0) are ignored for all counters.",
+      footer: "This is a per-trade throttle: the next trade after a mode switch uses the new mode.",
     };
   }
 
   // LOW
-  const need = Math.max(0, winsToRecover - risk.lowWinsProgress);
+  const remaining = Math.max(0, winsToReturn - risk.lowWinsProgress);
 
   return {
     title: "LOW mode",
-    subtitle: "Throttle engaged — you must earn wins back to regain HIGH.",
+    subtitle: "Rebuild confidence with tiny risk.",
     bullets: [
-      `Wins earned in LOW: ${risk.lowWinsProgress}/${winsToRecover}.`,
-      `You need ${need} more winning trade${need === 1 ? "" : "s"} to return to HIGH.`,
-      "Any losing trade in LOW resets win progress back to 0.",
-      `Allowed risk right now: ${allowed} (equity ${equity}).`,
+      `Risk today: ${(cfg.lowRiskPct * 100).toFixed(2)}% of equity (${allowed}).`,
+      `Progress: ${risk.lowWinsProgress}/${winsToReturn} winning trades needed to return to HIGH.`,
+      "A losing trade resets the win progress back to 0.",
+      "Breakeven trades (P&L = 0) are ignored.",
+      `Wins remaining to return to HIGH: ${remaining}.`,
+      `Equity used: ${equity} (starting equity + realized P&L as of last closed trade).`,
     ],
-    footer: "Breakeven trades (P&L = 0) are ignored for all counters.",
+    footer: "This is a per-trade throttle: the next trade after a mode switch uses the new mode.",
   };
 }

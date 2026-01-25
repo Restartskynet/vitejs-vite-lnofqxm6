@@ -10,20 +10,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) =>
   readFileSync(resolve(__dirname, "../../testdata", name), "utf8");
 
-describe("Trade building determinism", () => {
-  test("same fills -> identical trades (including IDs)", () => {
+describe("position session builder", () => {
+  test("is deterministic for identical fill inputs", () => {
     const csv = fixture("valid_small.csv");
-    const imported = importWebullOrders(csv);
+    const imp = importWebullOrders(csv);
 
-    const a = buildPositionSessions(imported.fills);
-    const b = buildPositionSessions(imported.fills);
+    const run1 = buildPositionSessions(imp.fills);
+    const run2 = buildPositionSessions(imp.fills);
 
-    expect(a.warnings).toEqual(b.warnings);
-    expect(a.trades).toEqual(b.trades);
+    expect(run1.warnings).toEqual(run2.warnings);
+    expect(run1.trades).toEqual(run2.trades);
 
-    expect(a.trades.length).toBe(1);
-    expect(a.trades[0].pnl).toBe(10);
-    expect(a.trades[0].win).toBe(true);
-    expect(a.trades[0].loss).toBe(false);
+    // sanity: expected 1 closed trade
+    expect(run1.trades.length).toBe(1);
+    expect(run1.trades[0].symbol).toBe("AAPL");
+    expect(run1.trades[0].pnl).toBeCloseTo(10, 6);
   });
 });

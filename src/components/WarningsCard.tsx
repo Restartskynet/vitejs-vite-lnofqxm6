@@ -8,7 +8,7 @@ function badgeVariant(level: ImportWarning["level"]) {
   return "outline";
 }
 
-export default function WarningsCard({ warnings }: { warnings: ImportWarning[] }) {
+export function WarningsCard({ warnings }: { warnings: ImportWarning[] }) {
   if (!warnings?.length) {
     return (
       <Card>
@@ -54,3 +54,5 @@ export default function WarningsCard({ warnings }: { warnings: ImportWarning[] }
     </Card>
   );
 }
+
+export default WarningsCard;

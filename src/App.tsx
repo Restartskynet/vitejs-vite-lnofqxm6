@@ -10,101 +10,138 @@ import { computeMetrics } from "./engine/metrics";
 import { UploadCard } from "./components/UploadCard";
 import { WarningsCard } from "./components/WarningsCard";
 import { HeroRiskPanel } from "./components/HeroRiskPanel";
-import { MetricsCard } from "./components/MetricsCard";
-import { DailyChart } from "./components/DailyChart";
-import { TradesTable } from "./components/TradesTable";
 import { RiskSizer } from "./components/RiskSizer";
+import { EquityChart } from "./components/EquityChart";
+import { DrawdownChart } from "./components/DrawdownChart";
+import { TradesTable } from "./components/TradesTable";
+import { KpiCards } from "./components/KpiCards";
+
+function normalizeWarning(w: string | ImportWarning): ImportWarning {
+  if (typeof w === "string") return { level: "warning", message: w, action: "Review" };
+  return w;
+}
+
+function toFiniteNumber(text: string): number {
+  const n = Number(text);
+  return Number.isFinite(n) ? n : 0;
+}
 
 export default function App() {
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [startingEquity, setStartingEquity] = useState<string>("20000");
+  const [startingEquity, setStartingEquity] = useState<string>("25000");
+
   const [warnings, setWarnings] = useState<ImportWarning[]>([]);
+  const [metaText, setMetaText] = useState<string>("");
+
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [daily, setDaily] = useState<DailyRow[]>([]);
-  const [risk, setRisk] = useState<RiskState>(() => computeRiskState([], 20000, STRATEGY));
+  const [risk, setRisk] = useState<RiskState | null>(null);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
 
-  const startingEquityNum = useMemo(() => {
-    const n = Number(startingEquity);
-    return Number.isFinite(n) ? n : 0;
-  }, [startingEquity]);
+  const startingEquityNum = useMemo(() => toFiniteNumber(startingEquity), [startingEquity]);
 
-  const derivedDaily = useMemo(() => aggregateDaily(trades, startingEquityNum), [trades, startingEquityNum]);
-  const derivedRisk = useMemo(() => computeRiskState(trades, startingEquityNum, STRATEGY), [trades, startingEquityNum]);
-  const derivedMetrics = useMemo(() => computeMetrics(trades, derivedDaily), [trades, derivedDaily]);
+  const daily: DailyRow[] = useMemo(() => {
+    if (!trades.length) return [];
+    return aggregateDaily(trades, startingEquityNum);
+  }, [trades, startingEquityNum]);
+
+  const currentEquity = useMemo(() => {
+    if (!daily.length) return null;
+    return daily[daily.length - 1].accountEquity;
+  }, [daily]);
+
+  // Per-trade Restart throttle (StrategySpec_Restart v1)
+  const derivedRisk = useMemo(() => {
+    return computeRiskState(trades, startingEquityNum, STRATEGY);
+  }, [trades, startingEquityNum]);
 
   useEffect(() => {
-    setDaily(derivedDaily);
     setRisk(derivedRisk);
-    setMetrics(derivedMetrics);
-  }, [derivedDaily, derivedRisk, derivedMetrics]);
+  }, [derivedRisk]);
 
   async function handleFile(file: File) {
     setStatus("loading");
     setWarnings([]);
+    setTrades([]);
+    setMetaText("");
+    setMetrics(null);
 
     try {
       const text = await file.text();
-      const imported = importWebullOrders(text);
 
-      const sessions = buildPositionSessions(imported.fills);
+      const imp = importWebullOrders(text);
 
-      const allWarnings: ImportWarning[] = [
-        ...(imported.warnings ?? []),
-        ...(sessions.warnings ?? []),
-      ].map((w) => ({
-        level: w.level ?? "info",
-        code: w.code ?? "unknown_warning",
-        message: w.message ?? "Warning",
-        meta: w.meta,
-      }));
+      const nextWarnings: ImportWarning[] = [
+        ...imp.warnings.map(normalizeWarning),
+        {
+          level: "info",
+          message: `Rows: ${imp.rawCount} • Filled: ${imp.filledCount} • Used: ${imp.usedCount} • Skipped: ${imp.skippedCount}`,
+        },
+      ];
 
-      setWarnings(allWarnings);
+      const sessions = buildPositionSessions(imp.fills);
+      nextWarnings.push(...sessions.warnings.map(normalizeWarning));
+
       setTrades(sessions.trades);
+      setWarnings(nextWarnings);
+
+      const d = aggregateDaily(sessions.trades, startingEquityNum);
+      setMetrics(computeMetrics(sessions.trades, d));
+
+      setMetaText(
+        `Imported: ${file.name} • Days: ${d.length} • Last: ${d.length ? d[d.length - 1].date : "—"} • Equity: ${
+          d.length ? d[d.length - 1].accountEquity.toFixed(2) : "—"
+        }`
+      );
+
       setStatus("ready");
     } catch (e: any) {
       setStatus("error");
-      setWarnings([
-        {
-          level: "error",
-          code: "import_failed",
-          message: e?.message ?? "Import failed",
-        },
-      ]);
+      setWarnings([{ level: "error", message: e?.message ?? "Unknown error" }]);
     }
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="mb-8 space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Restart Risk</h1>
-          <p className="text-muted-foreground">
-            Upload Webull Orders Records CSV → deterministic fills → trades → risk throttle output.
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold text-slate-900">Restart Risk Dashboard</h1>
+          <p className="text-sm text-slate-600">
+            Local-first CSV import → trades → daily equity → deterministic risk mode (LOW/HIGH) → position sizing.
           </p>
+          {metaText && <p className="text-xs text-slate-500">{metaText}</p>}
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1 space-y-6">
-            <UploadCard
-              onFile={handleFile}
-              status={status}
-              startingEquity={startingEquity}
-              setStartingEquity={setStartingEquity}
-            />
-            <WarningsCard warnings={warnings} />
-          </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <UploadCard
+            onFile={handleFile}
+            status={status}
+            startingEquity={startingEquity}
+            setStartingEquity={setStartingEquity}
+          />
+          <HeroRiskPanel risk={risk ?? derivedRisk} cfg={STRATEGY} />
+        </div>
 
-          <div className="lg:col-span-2 space-y-6">
-            <HeroRiskPanel risk={risk} cfg={STRATEGY} />
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <MetricsCard metrics={metrics} />
-              <RiskSizer risk={risk} />
+        <WarningsCard warnings={warnings} />
+
+        <KpiCards metrics={metrics} />
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <RiskSizer risk={risk ?? derivedRisk} />
+          <div className="rounded-2xl border bg-white p-4">
+            <div className="text-sm font-semibold text-slate-800">Current equity</div>
+            <div className="text-2xl font-semibold text-slate-900">
+              {currentEquity == null ? "—" : currentEquity.toFixed(2)}
             </div>
-            <DailyChart daily={daily} />
-            <TradesTable trades={trades} />
+            <div className="text-xs text-slate-500">Based on imported closed trades + adjustments (if any).</div>
           </div>
         </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <EquityChart daily={daily} />
+          <DrawdownChart daily={daily} />
+        </div>
+
+        <TradesTable trades={trades} />
       </div>
     </div>
   );

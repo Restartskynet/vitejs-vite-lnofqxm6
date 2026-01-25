@@ -28,7 +28,9 @@ export function aggregateDaily(trades: Trade[], startingEquity: number): DailyRo
     const row = byDay.get(day)!;
 
     tradingEquity += row.pnl;
-    accountEquity = tradingEquity;
+    // v1: no manual adjustments yet. Keep this field for schema stability.
+    const adjustment = 0;
+    accountEquity = tradingEquity + adjustment;
 
     peakEquity = Math.max(peakEquity, accountEquity);
     const dd = peakEquity > 0 ? (accountEquity - peakEquity) / peakEquity : 0;
@@ -36,6 +38,7 @@ export function aggregateDaily(trades: Trade[], startingEquity: number): DailyRo
     out.push({
       date: day,
       tradePnL: row.pnl,
+      adjustment,
       tradingEquity,
       accountEquity,
       peakEquity,

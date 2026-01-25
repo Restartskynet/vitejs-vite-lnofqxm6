@@ -11,20 +11,25 @@ export function UploadCard(props: {
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  const canUpload = props.status !== "loading";
+
   return (
-    <Card>
+    <Card className="rounded-2xl">
       <CardHeader>
-        <CardTitle>1) Import Webull CSV</CardTitle>
+        <CardTitle>1) Upload Webull Orders CSV</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <div className="text-sm text-muted-foreground">Starting equity</div>
+          <label className="text-sm font-medium text-slate-800">Starting equity</label>
           <Input
-            inputMode="decimal"
             value={props.startingEquity}
             onChange={(e) => props.setStartingEquity(e.target.value)}
-            placeholder="20000"
+            inputMode="decimal"
+            placeholder="25000"
           />
+          <div className="text-xs text-slate-500">
+            This is your equity before the first trade in the imported CSV.
+          </div>
         </div>
 
         <input
@@ -33,22 +38,25 @@ export function UploadCard(props: {
           accept=".csv,text/csv"
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) props.onFile(f);
+            const file = e.target.files?.[0];
+            if (!file) return;
+            props.onFile(file);
+            // reset the input so uploading the same file again retriggers change
             e.currentTarget.value = "";
           }}
         />
 
-        <Button
-          className="w-full"
-          onClick={() => fileRef.current?.click()}
-          disabled={props.status === "loading"}
-        >
-          {props.status === "loading" ? "Importing..." : "Choose CSV"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            disabled={!canUpload}
+            onClick={() => fileRef.current?.click()}
+          >
+            {props.status === "loading" ? "Importing…" : "Choose CSV"}
+          </Button>
 
-        <div className="text-xs text-muted-foreground">
-          Supported: Webull <b>Orders Records</b> CSV (v1). “Partially Filled” rows are ignored with a warning.
+          <div className="text-xs text-slate-500">
+            Supported (v1): Webull → <span className="font-medium">Orders Records</span> CSV
+          </div>
         </div>
       </CardContent>
     </Card>

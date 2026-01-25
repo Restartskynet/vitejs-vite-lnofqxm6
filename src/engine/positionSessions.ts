@@ -74,6 +74,8 @@ export function buildPositionSessions(
     const exitPrice = fill.price;
 
     const pnl = (exitPrice - entryPrice) * sellQty;
+    const denom = entryPrice * sellQty;
+    const pct = denom > 0 ? pnl / denom : 0;
 
     const tradeNoId: Omit<Trade, "id"> = {
       symbol,
@@ -85,6 +87,7 @@ export function buildPositionSessions(
       entryDate: dateKeyMarket(pos.firstBuyTs ?? fill.ts),
       exitDate: dateKeyMarket(fill.ts),
       pnl,
+      pct,
       win: pnl > 0,
       loss: pnl < 0,
       legs: pos.legs + 1, // include this sell leg
@@ -98,11 +101,14 @@ export function buildPositionSessions(
     pos.legs += 1;
 
     if (pos.qty <= 0) {
+      // Position fully closed
       positions.delete(symbol);
     } else {
+      // Still open — keep avgCost the same, keep firstBuyTs
       positions.set(symbol, pos);
     }
 
+    // If the sell qty was larger than current position, warn about the overflow
     if (fill.qty > sellQty) {
       warnings.push({
         level: "warning",
@@ -112,6 +118,7 @@ export function buildPositionSessions(
     }
   }
 
+  // Any open positions left = warning
   for (const [symbol, pos] of positions.entries()) {
     if (pos.qty > 0) {
       warnings.push({
@@ -122,6 +129,7 @@ export function buildPositionSessions(
     }
   }
 
+  // Sort trades by exit time for stability
   trades.sort((a, b) => a.exitTs.getTime() - b.exitTs.getTime());
 
   return { trades, warnings };
