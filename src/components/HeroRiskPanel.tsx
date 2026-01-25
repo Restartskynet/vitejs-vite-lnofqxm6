@@ -1,103 +1,95 @@
 import type { RiskState, StrategyConfig } from "../types/models";
-import { fmtMoney, fmtPct } from "../utils/numbers";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { fmtMoney, fmtPct } from "../utils/numbers";
 import { explainMode } from "../engine/explain";
 
-export function HeroRiskPanel({ risk, cfg }: { risk: RiskState; cfg: StrategyConfig }) {
-  const modeLabel = risk.mode === "LOW" ? "LOW RISK" : "HIGH RISK";
-  const explain = explainMode(risk, cfg);
+export function HeroRiskPanel({
+  risk,
+  cfg,
+}: {
+  risk: RiskState;
+  cfg: StrategyConfig;
+}) {
+  const mode = risk.mode;
+  const expl = explainMode(risk, cfg);
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Pre-Market Risk Output</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>2) Restart Throttle Output</CardTitle>
+          <div className="text-sm text-muted-foreground mt-1">
+            As-of last closed trade:{" "}
+            <span className="font-medium">
+              {risk.asOfCloseDate ?? "—"}
+            </span>
+          </div>
+        </div>
+        <Badge variant={mode === "HIGH" ? "default" : "secondary"}>
+          {mode}
+        </Badge>
       </CardHeader>
 
-      <CardContent>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-neutral-200 p-4">
-            <div className="flex items-center gap-2">
-              <Badge>{modeLabel}</Badge>
-              <span className="text-xs text-neutral-500">
-                As-of close:{" "}
-                <span className="font-semibold text-neutral-800">
-                  {risk.asOfCloseDate ?? "—"}
-                </span>
-              </span>
-            </div>
-
-            <div className="mt-3 text-xs text-neutral-500">
-              TODAY RISK % (pre-market)
-            </div>
-            <div className="mt-1 text-4xl font-black tracking-tight text-neutral-900">
-              {fmtPct(risk.todayRiskPct)}
-            </div>
-
-            <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-neutral-700">
-              <div>
-                Today date:{" "}
-                <span className="font-semibold text-neutral-900">
-                  {risk.todayDate}
-                </span>
-              </div>
-              <div>
-                Equity used:{" "}
-                <span className="font-semibold text-neutral-900">
-                  {fmtMoney(risk.equityAsOfClose)}
-                </span>
-              </div>
-              <div>
-                Allowed risk $:{" "}
-                <span className="font-semibold text-neutral-900">
-                  {fmtMoney(risk.allowedRiskDollars)}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-xl bg-neutral-100 p-3">
-              <div className="text-xs font-mono text-neutral-900 space-y-1">
-                {explain.map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
-              </div>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-lg border p-4">
+            <div className="text-xs text-muted-foreground">Equity (as-of close)</div>
+            <div className="text-lg font-semibold mt-1">
+              {fmtMoney(risk.equityAsOfClose)}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-neutral-200 p-4">
-            <div className="text-xs text-neutral-500">
-              TOMORROW (forecast + scenarios)
+          <div className="rounded-lg border p-4">
+            <div className="text-xs text-muted-foreground">Risk % (next trade)</div>
+            <div className="text-lg font-semibold mt-1">
+              {fmtPct(risk.todayRiskPct)}
             </div>
-            <div className="mt-1 text-4xl font-black tracking-tight text-neutral-900">
-              {fmtPct(risk.tomorrowBaseRiskPct)}
-            </div>
+          </div>
 
-            <div className="mt-2 text-sm text-neutral-700">
-              Tomorrow date:{" "}
-              <span className="font-semibold text-neutral-900">
-                {risk.tomorrowDate}
-              </span>
+          <div className="rounded-lg border p-4">
+            <div className="text-xs text-muted-foreground">Allowed risk dollars</div>
+            <div className="text-lg font-semibold mt-1">
+              {fmtMoney(risk.allowedRiskDollars)}
             </div>
+          </div>
+        </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-2 text-sm">
-              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-                <div className="text-xs text-neutral-500">If today closes as WIN</div>
-                <div className="text-lg font-bold text-neutral-900">
-                  {fmtPct(risk.tomorrowIfWinRiskPct)}
-                </div>
-              </div>
+        <div className="rounded-lg border p-4 space-y-2">
+          <div className="font-semibold">{expl.title}</div>
+          <div className="text-sm text-muted-foreground">{expl.subtitle}</div>
+          <ul className="list-disc pl-5 text-sm space-y-1">
+            {expl.bullets.map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
+          </ul>
+          <div className="text-xs text-muted-foreground pt-2">{expl.footer}</div>
+        </div>
 
-              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-                <div className="text-xs text-neutral-500">If today closes as LOSS</div>
-                <div className="text-lg font-bold text-neutral-900">
-                  {fmtPct(risk.tomorrowIfLossRiskPct)}
-                </div>
-              </div>
+        <div className="rounded-lg border p-4">
+          <div className="font-semibold mb-2">Forecast (state machine)</div>
+          <div className="text-sm text-muted-foreground mb-3">
+            This is purely the throttle logic: “what mode/risk% would you be in after the next trade result?”
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">Base (no next trade yet)</div>
+              <div className="text-base font-semibold mt-1">{fmtPct(risk.tomorrowBaseRiskPct)}</div>
             </div>
-
-            <div className="mt-3 text-xs text-neutral-500">
-              Rule: LOW 0.10% until 2 wins → HIGH 3% until 1 loss → repeat (daily only)
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">If next trade is a WIN</div>
+              <div className="text-base font-semibold mt-1">{fmtPct(risk.tomorrowIfWinRiskPct)}</div>
             </div>
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">If next trade is a LOSS</div>
+              <div className="text-base font-semibold mt-1">{fmtPct(risk.tomorrowIfLossRiskPct)}</div>
+            </div>
+          </div>
+
+          <div className="text-xs text-muted-foreground mt-3">
+            Market date: <span className="font-medium">{risk.todayDate}</span> →{" "}
+            <span className="font-medium">{risk.tomorrowDate}</span>
           </div>
         </div>
       </CardContent>

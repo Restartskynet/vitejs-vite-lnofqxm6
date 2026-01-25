@@ -1,180 +1,127 @@
-import { nanoid } from "nanoid";
 import type { ImportWarning, Trade, WebullFill } from "../types/models";
 import { dateKeyMarket } from "../utils/dates";
 
-interface Lot {
-  qty: number;
-  entryPrice: number;
-}
-
-interface OpenSession {
+type OpenPosition = {
   symbol: string;
-  entryTs: Date;
-  lastExitTs: Date | null;
-
-  totalBoughtQty: number;
-  totalBoughtCost: number;
-
-  totalSoldQty: number;
-  totalSoldProceeds: number;
-
-  pnl: number;
+  qty: number; // shares currently held
+  avgCost: number; // average cost basis
+  firstBuyTs: Date | null;
   legs: number;
+};
+
+function idNum(n: number): string {
+  // Fixed precision string for deterministic IDs across runs
+  return Number.isFinite(n) ? n.toFixed(6) : "NaN";
 }
 
-export interface PositionBuildResult {
-  trades: Trade[];
-  warnings: ImportWarning[];
+function makeTradeId(t: Omit<Trade, "id">): string {
+  // A stable, deterministic ID (important for tests + trust)
+  return [
+    t.symbol,
+    t.entryTs.toISOString(),
+    t.exitTs.toISOString(),
+    String(t.qty),
+    idNum(t.entryPrice),
+    idNum(t.exitPrice),
+    String(t.legs),
+  ].join("|");
 }
 
-/**
- * Builds trades as "position sessions":
- * - Scale-ins/scale-outs collapse into one Trade
- * - PnL is still computed FIFO internally
- * - Win/loss counts match real trader intent (1 position = 1 win/loss)
- */
-export function buildPositionSessions(fills: WebullFill[]): PositionBuildResult {
+export function buildPositionSessions(
+  fills: WebullFill[]
+): { trades: Trade[]; warnings: ImportWarning[] } {
   const warnings: ImportWarning[] = [];
   const trades: Trade[] = [];
 
-  const lotsBySymbol = new Map<string, Lot[]>();
-  const sessionBySymbol = new Map<string, OpenSession>();
+  const positions = new Map<string, OpenPosition>();
 
-  function getLots(symbol: string): Lot[] {
-    const existing = lotsBySymbol.get(symbol);
-    if (existing) return existing;
-    const next: Lot[] = [];
-    lotsBySymbol.set(symbol, next);
-    return next;
-  }
+  for (const fill of fills) {
+    const symbol = fill.symbol;
+    const side = fill.side;
 
-  function getOrStartSession(symbol: string, entryTs: Date): OpenSession {
-    const existing = sessionBySymbol.get(symbol);
-    if (existing) return existing;
-
-    const s: OpenSession = {
+    const pos = positions.get(symbol) ?? {
       symbol,
-      entryTs,
-      lastExitTs: null,
-      totalBoughtQty: 0,
-      totalBoughtCost: 0,
-      totalSoldQty: 0,
-      totalSoldProceeds: 0,
-      pnl: 0,
+      qty: 0,
+      avgCost: 0,
+      firstBuyTs: null,
       legs: 0,
     };
 
-    sessionBySymbol.set(symbol, s);
-    return s;
-  }
+    // BUY: increase position, recalc avg cost
+    if (side === "BUY") {
+      const newQty = pos.qty + fill.qty;
+      const newCostBasis = pos.avgCost * pos.qty + fill.price * fill.qty;
+      pos.qty = newQty;
+      pos.avgCost = newQty > 0 ? newCostBasis / newQty : 0;
+      pos.firstBuyTs = pos.firstBuyTs ?? fill.ts;
+      pos.legs += 1;
+      positions.set(symbol, pos);
+      continue;
+    }
 
-  function finalizeIfFlat(symbol: string) {
-    const lots = getLots(symbol);
-    const session = sessionBySymbol.get(symbol);
-    if (!session) return;
+    // SELL: only valid if we actually have shares
+    if (pos.qty <= 0) {
+      warnings.push({
+        level: "warning",
+        code: "sell_without_position",
+        message: `Sell ignored for ${symbol} because you had no open position.`,
+      });
+      continue;
+    }
 
-    if (lots.length > 0) return; // still holding position
-    if (!session.lastExitTs) return; // never sold
+    const sellQty = Math.min(pos.qty, fill.qty);
+    const entryPrice = pos.avgCost;
+    const exitPrice = fill.price;
 
-    const entryPrice =
-      session.totalBoughtQty > 0 ? session.totalBoughtCost / session.totalBoughtQty : 0;
+    const pnl = (exitPrice - entryPrice) * sellQty;
 
-    const exitPrice =
-      session.totalSoldQty > 0 ? session.totalSoldProceeds / session.totalSoldQty : 0;
-
-    const pnl = session.pnl;
-
-    const entryTs = session.entryTs;
-    const exitTs = session.lastExitTs;
-
-    trades.push({
-      id: nanoid(),
+    const tradeNoId: Omit<Trade, "id"> = {
       symbol,
-      qty: session.totalSoldQty,
+      qty: sellQty,
       entryPrice,
       exitPrice,
-      entryTs,
-      exitTs,
-      entryDate: dateKeyMarket(entryTs),
-      exitDate: dateKeyMarket(exitTs),
+      entryTs: pos.firstBuyTs ?? fill.ts,
+      exitTs: fill.ts,
+      entryDate: dateKeyMarket(pos.firstBuyTs ?? fill.ts),
+      exitDate: dateKeyMarket(fill.ts),
       pnl,
       win: pnl > 0,
       loss: pnl < 0,
-      legs: session.legs,
-    });
+      legs: pos.legs + 1, // include this sell leg
+    };
 
-    sessionBySymbol.delete(symbol);
-  }
+    const trade: Trade = { id: makeTradeId(tradeNoId), ...tradeNoId };
+    trades.push(trade);
 
-  for (const f of fills) {
-    const lots = getLots(f.symbol);
+    // Reduce position
+    pos.qty = pos.qty - sellQty;
+    pos.legs += 1;
 
-    if (f.side === "BUY") {
-      const s = getOrStartSession(f.symbol, f.ts);
-      lots.push({ qty: f.qty, entryPrice: f.price });
-
-      s.totalBoughtQty += f.qty;
-      s.totalBoughtCost += f.qty * f.price;
-
-      continue;
+    if (pos.qty <= 0) {
+      positions.delete(symbol);
+    } else {
+      positions.set(symbol, pos);
     }
 
-    // SELL
-    let remaining = f.qty;
-
-    if (lots.length === 0) {
+    if (fill.qty > sellQty) {
       warnings.push({
         level: "warning",
-        message: `Unmatched SELL ignored: ${f.symbol} qty=${remaining}`,
-        action: "This usually means short-selling or missing earlier history.",
-      });
-      continue;
-    }
-
-    const s = getOrStartSession(f.symbol, f.ts);
-
-    while (remaining > 0 && lots.length > 0) {
-      const lot = lots[0];
-      const useQty = Math.min(remaining, lot.qty);
-
-      const pnl = (f.price - lot.entryPrice) * useQty;
-
-      s.pnl += pnl;
-      s.totalSoldQty += useQty;
-      s.totalSoldProceeds += useQty * f.price;
-      s.lastExitTs = f.ts;
-      s.legs += 1;
-
-      lot.qty -= useQty;
-      remaining -= useQty;
-
-      if (lot.qty <= 0) lots.shift();
-    }
-
-    if (remaining > 0) {
-      warnings.push({
-        level: "warning",
-        message: `SELL exceeded buys: ${f.symbol} remaining=${remaining}`,
-        action: "Some sells were ignored (incomplete history).",
+        code: "sell_exceeds_position",
+        message: `Sell for ${symbol} exceeded open position. Used ${sellQty} of ${fill.qty}.`,
       });
     }
-
-    // if flat, finalize trade session
-    finalizeIfFlat(f.symbol);
   }
 
-  // Warn about open positions left
-  for (const [symbol, lots] of lotsBySymbol.entries()) {
-    if (lots.length > 0) {
+  for (const [symbol, pos] of positions.entries()) {
+    if (pos.qty > 0) {
       warnings.push({
         level: "info",
-        message: `Open position not closed in CSV: ${symbol}`,
-        action: "Not counted in results until it’s sold/closed.",
+        code: "open_position_remaining",
+        message: `Position still open for ${symbol}: ${pos.qty} shares remaining. Export more data to close it.`,
       });
     }
   }
 
-  // Sort trades by exit time (stable UI)
   trades.sort((a, b) => a.exitTs.getTime() - b.exitTs.getTime());
 
   return { trades, warnings };
