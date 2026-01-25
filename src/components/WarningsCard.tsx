@@ -1,6 +1,7 @@
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import type { ImportWarning } from "../types/models";
+import { AlertTriangle, Info, XCircle } from "lucide-react";
 
 function badgeVariant(level: ImportWarning["level"]) {
   if (level === "error") return "destructive";
@@ -11,47 +12,49 @@ function badgeVariant(level: ImportWarning["level"]) {
 export function WarningsCard({ warnings }: { warnings: ImportWarning[] }) {
   if (!warnings?.length) {
     return (
-      <Card>
-        <CardContent className="p-4 text-sm text-neutral-600">
-          Upload your Webull Orders CSV to generate the dashboard.
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />
+          <p className="text-sm text-slate-300">
+            Upload your Webull Orders CSV to generate the dashboard.
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-semibold">Import / Build Warnings</div>
-          <Badge variant="outline">{warnings.length}</Badge>
-        </div>
+    <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6 backdrop-blur-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-base font-semibold text-white">Import / Build Warnings</div>
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-700 text-slate-300">
+          {warnings.length}
+        </span>
+      </div>
 
-        <div className="space-y-2">
-          {warnings.map((w, idx) => (
+      <div className="space-y-3">
+        {warnings.map((w, idx) => {
+          const Icon = w.level === "error" ? XCircle : w.level === "warning" || w.level === "warn" ? AlertTriangle : Info;
+          const iconColor = w.level === "error" ? "text-rose-400" : w.level === "warning" || w.level === "warn" ? "text-amber-400" : "text-blue-400";
+          const bgColor = w.level === "error" ? "bg-rose-500/10 border-rose-500/30" : w.level === "warning" || w.level === "warn" ? "bg-amber-500/10 border-amber-500/30" : "bg-blue-500/10 border-blue-500/30";
+          
+          return (
             <div
               key={idx}
-              className="flex items-start justify-between gap-3 rounded-xl border bg-white px-3 py-2"
+              className={`flex items-start gap-3 rounded-lg border ${bgColor} p-3`}
             >
-              <div className="min-w-0">
-                <div className="text-xs text-neutral-500">
-                  <Badge variant={badgeVariant(w.level)} className="mr-2">
-                    {w.level.toUpperCase()}
-                  </Badge>
-                </div>
-                <div className="text-sm">{w.message}</div>
+              <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${iconColor}`} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-white">{w.message}</div>
+                {w.action && (
+                  <div className="text-xs text-slate-400 mt-1">→ {w.action}</div>
+                )}
               </div>
-
-              {w.action ? (
-                <Badge variant="outline" className="shrink-0">
-                  {w.action}
-                </Badge>
-              ) : null}
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

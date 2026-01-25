@@ -7,6 +7,7 @@ import { aggregateDaily } from "./engine/dailyAggregator";
 import { computeRiskState, STRATEGY } from "./engine/riskEngine";
 import { computeMetrics } from "./engine/metrics";
 
+import { DashboardLayout } from "./components/DashboardLayout";
 import { UploadCard } from "./components/UploadCard";
 import { WarningsCard } from "./components/WarningsCard";
 import { HeroRiskPanel } from "./components/HeroRiskPanel";
@@ -101,17 +102,21 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-slate-900">Restart Risk Dashboard</h1>
-          <p className="text-sm text-slate-600">
+    <DashboardLayout>
+      <div className="space-y-8">
+        {/* Header Section */}
+        <div className="space-y-2">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+            Restart Risk Dashboard
+          </h1>
+          <p className="text-slate-400 text-sm">
             Local-first CSV import → trades → daily equity → deterministic risk mode (LOW/HIGH) → position sizing.
           </p>
-          {metaText && <p className="text-xs text-slate-500">{metaText}</p>}
+          {metaText && <p className="text-slate-500 text-xs">{metaText}</p>}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Upload & Risk Hero Section */}
+        <div className="grid gap-6 md:grid-cols-2">
           <UploadCard
             onFile={handleFile}
             status={status}
@@ -121,34 +126,33 @@ export default function App() {
           <HeroRiskPanel risk={risk ?? derivedRisk} cfg={STRATEGY} />
         </div>
 
+        {/* Warnings */}
         <WarningsCard warnings={warnings} />
 
+        {/* KPI Metrics */}
         <KpiCards metrics={metrics} />
 
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Risk Sizer & Current Equity */}
+        <div className="grid gap-6 md:grid-cols-2">
           <RiskSizer risk={risk ?? derivedRisk} />
-          <div className="rounded-2xl border bg-white p-4">
-            <div className="text-sm font-semibold text-slate-800">Current equity</div>
-            <div className="text-2xl font-semibold text-slate-900">
-              {currentEquity == null ? "—" : currentEquity.toFixed(2)}
+          <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 backdrop-blur-sm">
+            <div className="text-sm font-semibold text-slate-400">Current Equity</div>
+            <div className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mt-2">
+              {currentEquity == null ? "—" : `$${currentEquity.toFixed(2)}`}
             </div>
-            <div className="text-xs text-slate-500">Based on imported closed trades + adjustments (if any).</div>
+            <div className="text-xs text-slate-500 mt-2">Based on imported closed trades + adjustments (if any).</div>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Charts */}
+        <div className="grid gap-6 md:grid-cols-2">
           <EquityChart daily={daily} />
           <DrawdownChart daily={daily} />
         </div>
 
+        {/* Trades Table */}
         <TradesTable trades={trades} />
-        <DashboardLayout>
-        {/* Your existing components with new styling classes */}
-        <HeroRiskPanel risk={risk} cfg={STRATEGY} />
-        <KpiCards metrics={metrics} />
-        {/* etc */}
-        </DashboardLayout>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
