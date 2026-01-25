@@ -5,7 +5,7 @@ import "./index.css";
 import { UploadCard } from "./components/UploadCard";
 import { HeroRiskPanel } from "./components/HeroRiskPanel";
 import { RiskSizer } from "./components/RiskSizer";
-import { WarningsCard } from "./components/WarningsCard";
+import WarningsCard from "./components/WarningsCard";
 import { KpiCards } from "./components/KpiCards";
 import { EquityChart } from "./components/EquityChart";
 import { DrawdownChart } from "./components/DrawdownChart";
