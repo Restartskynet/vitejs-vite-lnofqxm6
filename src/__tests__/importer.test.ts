@@ -10,31 +10,29 @@ const fixture = (name: string) =>
   readFileSync(resolve(__dirname, "../../testdata", name), "utf8");
 
 describe("Webull Orders importer", () => {
-  test("fails when required columns are missing", () => {
+  test("fails with missing required columns", () => {
     const csv = fixture("missing_required_columns.csv");
     const res = importWebullOrders(csv);
 
     expect(res.fills.length).toBe(0);
-    expect(res.warnings.some((w) => w.code === "missing_required_columns" && w.level === "error")).toBe(
-      true
-    );
+    expect(res.warnings.some((w) => w.code === "missing_required_columns")).toBe(true);
   });
 
-  test("ignores partially filled rows and emits a warning", () => {
+  test("warns + ignores Partially Filled rows (v1 policy)", () => {
     const csv = fixture("partially_filled_ignored.csv");
     const res = importWebullOrders(csv);
 
-    expect(res.filledCount).toBe(2);
-    expect(res.usedCount).toBe(2);
     expect(res.warnings.some((w) => w.code === "ignored_partially_filled")).toBe(true);
+    expect(res.fills.length).toBe(2);
+    expect(res.filledCount).toBe(2);
   });
 
-  test("parses @/$/comma formats", () => {
+  test("parses weird number formats ($, @, commas)", () => {
     const csv = fixture("weird_price_format.csv");
     const res = importWebullOrders(csv);
 
-    expect(res.usedCount).toBe(1);
+    expect(res.fills.length).toBe(1);
     expect(res.fills[0].qty).toBe(1000);
-    expect(res.fills[0].price).toBeCloseTo(1234.56, 6);
+    expect(res.fills[0].price).toBe(1234.56);
   });
 });

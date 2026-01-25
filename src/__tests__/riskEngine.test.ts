@@ -26,47 +26,60 @@ function makeTrade(pnl: number, exitTs: Date): Trade {
   };
 }
 
-describe("Restart throttle (riskEngine)", () => {
-  test("defaults to HIGH when there are no trades", () => {
-    const risk = computeRiskState([], 10_000, STRATEGY);
-    expect(risk.mode).toBe("HIGH");
-    expect(risk.lowWinsProgress).toBe(0);
-    expect(risk.todayRiskPct).toBeCloseTo(0.03, 12);
+describe("Restart throttle state machine (per-trade)", () => {
+  test("no trades -> starts HIGH", () => {
+    const r = computeRiskState([], 20000, STRATEGY);
+    expect(r.mode).toBe("HIGH");
+    expect(r.lowWinsProgress).toBe(0);
+    expect(r.todayRiskPct).toBe(STRATEGY.highRiskPct);
   });
 
-  test("loss in HIGH drops to LOW (immediately for next trade)", () => {
-    const trades = [makeTrade(-1, new Date("2026-01-02T18:00:00.000Z"))];
-    const risk = computeRiskState(trades, 10_000, STRATEGY);
-    expect(risk.mode).toBe("LOW");
-    expect(risk.lowWinsProgress).toBe(0);
-    expect(risk.todayRiskPct).toBeCloseTo(0.001, 12);
+  test("loss in HIGH -> LOW (immediate next trade)", () => {
+    const trades = [makeTrade(-1, new Date("2026-01-02T18:00:00Z"))];
+    const r = computeRiskState(trades, 20000, STRATEGY);
+
+    expect(r.mode).toBe("LOW");
+    expect(r.lowWinsProgress).toBe(0);
+    expect(r.todayRiskPct).toBe(STRATEGY.lowRiskPct);
   });
 
-  test("in LOW: 2 wins returns to HIGH; breakeven ignored; loss resets progress", () => {
-    const t1 = makeTrade(-1, new Date("2026-01-02T18:00:00.000Z")); // HIGH -> LOW
-    const t2 = makeTrade(+1, new Date("2026-01-02T19:00:00.000Z")); // LOW progress 1
-    const t3 = makeTrade(0, new Date("2026-01-02T20:00:00.000Z")); // ignored
-    const t4 = makeTrade(-1, new Date("2026-01-02T21:00:00.000Z")); // reset progress
-    const t5 = makeTrade(+1, new Date("2026-01-02T22:00:00.000Z")); // progress 1
-    const t6 = makeTrade(+1, new Date("2026-01-02T23:00:00.000Z")); // progress 2 -> HIGH
+  test("LOW: 2 wins -> HIGH; breakeven ignored", () => {
+    const trades = [
+      makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
+      makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // LOW progress 1
+      makeTrade(0, new Date("2026-01-02T18:20:00Z")),  // ignored
+      makeTrade(+1, new Date("2026-01-02T18:30:00Z")), // progress 2 -> HIGH
+    ];
 
-    const risk = computeRiskState([t1, t2, t3, t4, t5, t6], 10_000, STRATEGY);
-    expect(risk.mode).toBe("HIGH");
-    expect(risk.lowWinsProgress).toBe(0);
-    expect(risk.todayRiskPct).toBeCloseTo(0.03, 12);
+    const r = computeRiskState(trades, 20000, STRATEGY);
+    expect(r.mode).toBe("HIGH");
+    expect(r.lowWinsProgress).toBe(0);
+    expect(r.todayRiskPct).toBe(STRATEGY.highRiskPct);
   });
 
-  test("forecast reflects next-trade transitions", () => {
-    const t1 = makeTrade(-1, new Date("2026-01-02T18:00:00.000Z")); // HIGH -> LOW
-    const t2 = makeTrade(+1, new Date("2026-01-02T19:00:00.000Z")); // LOW progress 1
+  test("LOW: loss resets progress to 0", () => {
+    const trades = [
+      makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
+      makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // progress 1
+      makeTrade(-1, new Date("2026-01-02T18:20:00Z")), // reset to 0, stay LOW
+    ];
 
-    const risk = computeRiskState([t1, t2], 10_000, STRATEGY);
-    expect(risk.mode).toBe("LOW");
-    expect(risk.lowWinsProgress).toBe(1);
+    const r = computeRiskState(trades, 20000, STRATEGY);
+    expect(r.mode).toBe("LOW");
+    expect(r.lowWinsProgress).toBe(0);
+    expect(r.todayRiskPct).toBe(STRATEGY.lowRiskPct);
+  });
 
-    // If the next trade is a win, we should be back to HIGH (2 wins in LOW)
-    expect(risk.tomorrowIfWinRiskPct).toBeCloseTo(0.03, 12);
-    // If the next trade is a loss, we stay LOW
-    expect(risk.tomorrowIfLossRiskPct).toBeCloseTo(0.001, 12);
+  test("forecast: LOW with 1 win -> next WIN returns HIGH", () => {
+    const trades = [
+      makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
+      makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // LOW progress 1
+    ];
+
+    const r = computeRiskState(trades, 20000, STRATEGY);
+    expect(r.mode).toBe("LOW");
+    expect(r.lowWinsProgress).toBe(1);
+    expect(r.tomorrowIfWinRiskPct).toBe(STRATEGY.highRiskPct);
+    expect(r.tomorrowIfLossRiskPct).toBe(STRATEGY.lowRiskPct);
   });
 });
