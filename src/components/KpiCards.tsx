@@ -1,25 +1,35 @@
-import type { Metrics } from "../engine/metrics";
+// src/components/KpiCards.tsx
+import type { Metrics } from "../types/models";
 import { fmtMoney } from "../utils/numbers";
-import { Card, CardContent } from "./ui/card";
 
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-xs text-neutral-500">{label}</div>
-        <div className="mt-1 text-xl font-extrabold text-neutral-900">{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
+export function KpiCards({ metrics }: { metrics: Metrics | null }) {
+  if (!metrics) return null;
+  const m = metrics;
 
-export function KpiCards({ m }: { m: Metrics }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Tile label="Total Trades" value={m.totalTrades.toLocaleString()} />
-      <Tile label="Win Rate" value={`${m.winRatePct.toFixed(2)}%`} />
-      <Tile label="Total PnL" value={fmtMoney(m.totalPnL)} />
-      <Tile label="Max Drawdown" value={`${(m.maxDrawdownPct * 100).toFixed(2)}%`} />
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="rounded-xl border bg-white p-3">
+        <div className="text-xs text-slate-500">Trades</div>
+        <div className="text-lg font-semibold">{m.totalTrades}</div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-3">
+        <div className="text-xs text-slate-500">Win rate</div>
+        <div className="text-lg font-semibold">{m.winRatePct.toFixed(1)}%</div>
+        <div className="text-xs text-slate-500">
+          {m.wins}W / {m.losses}L
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-3">
+        <div className="text-xs text-slate-500">Total P&amp;L</div>
+        <div className="text-lg font-semibold">{fmtMoney(m.totalPnL)}</div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-3">
+        <div className="text-xs text-slate-500">Max drawdown</div>
+        <div className="text-lg font-semibold">{(m.maxDrawdownPct * 100).toFixed(2)}%</div>
+      </div>
     </div>
   );
 }

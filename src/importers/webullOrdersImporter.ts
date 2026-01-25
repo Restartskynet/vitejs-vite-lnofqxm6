@@ -1,158 +1,166 @@
 // src/importers/webullOrdersImporter.ts
 import Papa from "papaparse";
-import type { WebullFill, FillSide } from "../types/models";
-import { toNumber } from "../utils/numbers";
+import type { ImportWarning, WebullFill, FillSide } from "../types/models";
 
-function normalizeSide(v: unknown): FillSide | null {
-  const s = String(v ?? "").trim().toLowerCase();
-  if (!s) return null;
-  if (s.includes("buy")) return "BUY";
-  if (s.includes("sell")) return "SELL";
-  return null;
+type WebullRow = Record<string, string>;
+
+function toNumber(v: string): number {
+  const s = (v ?? "").trim().replaceAll(",", "").replaceAll("$", "").replaceAll("@", "");
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
 }
 
-/**
- * Webull example: "01/22/2026 09:53:04 EST"
- * We convert EST/EDT -> a real UTC Date, without date-fns-tz.
- */
-function parseWebullTimestamp(s: unknown): Date | null {
-  if (s === null || s === undefined) return null;
-  const raw = String(s).trim();
+// Webull exports timestamps like: "01/22/2026 09:53:04 EST"
+// We convert to a real Date by translating TZ suffix to a numeric offset.
+function parseWebullTimestamp(text: string): Date | null {
+  const raw = (text ?? "").trim();
   if (!raw) return null;
 
-  // Capture optional timezone suffix
-  const tzMatch = raw.match(/\s+(EST|EDT)\s*$/i);
-  const tz = tzMatch ? tzMatch[1].toUpperCase() : null;
-
-  const cleaned = raw.replace(/\s+(EST|EDT)\s*$/i, "").trim();
-
-  const m = cleaned.match(
-    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/
+  // Match: MM/DD/YYYY HH:MM:SS [TZ]
+  const m = raw.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})(?:\s+([A-Z]{2,4}))?$/
   );
-  if (!m) return null;
+  if (!m) {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
 
   const mm = Number(m[1]);
   const dd = Number(m[2]);
   const yyyy = Number(m[3]);
   const hh = Number(m[4]);
-  const min = Number(m[5]);
-  const sec = Number(m[6]);
+  const mi = Number(m[5]);
+  const ss = Number(m[6]);
+  const tz = (m[7] ?? "").toUpperCase();
 
-  // Interpret input time as US Eastern (EST/EDT) if suffix present.
-  // EST = UTC-5, EDT = UTC-4
-  if (tz === "EST") {
-    return new Date(Date.UTC(yyyy, mm - 1, dd, hh + 5, min, sec));
+  // Webull commonly uses EST/EDT. If no TZ is present, interpret as local.
+  let offsetHours: number | null = null;
+  if (tz === "EST") offsetHours = 5;
+  if (tz === "EDT") offsetHours = 4;
+
+  if (offsetHours == null) {
+    // No TZ suffix: treat as local time and let JS handle it.
+    const d = new Date(yyyy, mm - 1, dd, hh, mi, ss);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
-  if (tz === "EDT") {
-    return new Date(Date.UTC(yyyy, mm - 1, dd, hh + 4, min, sec));
-  }
 
-  // If no suffix, fall back to local interpretation
-  return new Date(yyyy, mm - 1, dd, hh, min, sec);
-}
-
-function makeStableFillId(
-  symbol: string,
-  side: FillSide,
-  qty: number,
-  price: number,
-  ts: Date
-): string {
-  return `${symbol}|${side}|${qty}|${price}|${ts.toISOString()}`;
-}
-
-export interface ImportStats {
-  totalRows: number;
-  filledRows: number;
-  usedRows: number;
+  // Convert local NY time -> UTC by adding offsetHours
+  const utc = Date.UTC(yyyy, mm - 1, dd, hh + offsetHours, mi, ss);
+  const d = new Date(utc);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export interface ImportResult {
   fills: WebullFill[];
-  stats: ImportStats;
-  warnings: string[];
+  warnings: ImportWarning[];
+
+  rawCount: number;
+  filledCount: number;
+  usedCount: number;
+  skippedCount: number;
 }
 
-export function importWebullOrdersCsv(csvText: string): ImportResult {
-  const warnings: string[] = [];
+const REQUIRED_COLS = ["Symbol", "Side", "Status", "Filled", "Avg Price", "Filled Time"];
 
-  const parsed = Papa.parse<Record<string, unknown>>(csvText, {
+export function importWebullOrders(csvText: string): ImportResult {
+  const warnings: ImportWarning[] = [];
+
+  const parsed = Papa.parse<WebullRow>(csvText, {
     header: true,
     skipEmptyLines: true,
+    transformHeader: (h) => (h ?? "").trim(),
   });
 
   if (parsed.errors?.length) {
-    warnings.push(`CSV parse warnings: ${parsed.errors.length}`);
+    warnings.push({
+      level: "warning",
+      code: "csv_parse_errors",
+      message: `CSV parse reported ${parsed.errors.length} error(s). First: ${parsed.errors[0].message}`,
+    });
   }
 
-  const rows = parsed.data ?? [];
-  const totalRows = rows.length;
+  const rows = (parsed.data ?? []).filter((r) => Object.keys(r).length > 0);
+  const rawCount = rows.length;
 
-  const requiredCols = [
-    "Symbol",
-    "Side",
-    "Status",
-    "Filled",
-    "Avg Price",
-    "Price",
-    "Filled Time",
-    "Placed Time",
-  ];
-
-  const sampleRow = rows[0] ?? {};
-  for (const col of requiredCols) {
-    if (!(col in sampleRow)) warnings.push(`Missing column: ${col}`);
+  const sample = rows[0] ?? {};
+  const missingCols = REQUIRED_COLS.filter((c) => !(c in sample));
+  if (missingCols.length) {
+    return {
+      fills: [],
+      warnings: [
+        ...warnings,
+        {
+          level: "error",
+          code: "missing_required_columns",
+          message: `Missing required column(s): ${missingCols.join(", ")}`,
+          action: "Re-export Webull Orders Records CSV",
+        },
+      ],
+      rawCount,
+      filledCount: 0,
+      usedCount: 0,
+      skippedCount: 0,
+    };
   }
 
-  let filledRows = 0;
+  const filledRows = rows.filter((r) => (r["Status"] ?? "").trim().toLowerCase() === "filled");
+  const filledCount = filledRows.length;
+
   const fills: WebullFill[] = [];
+  let skippedFilledCount = 0;
 
-  for (const r of rows) {
-    const status = String(r["Status"] ?? "").trim().toLowerCase();
-    if (status !== "filled") continue;
-    filledRows += 1;
+  for (const r of filledRows) {
+    const symbol = (r["Symbol"] ?? "").trim();
+    const sideRaw = (r["Side"] ?? "").trim().toUpperCase();
+    const side: FillSide = sideRaw.includes("BUY") ? "BUY" : "SELL";
 
-    const symbol = String(r["Symbol"] ?? "").trim();
-    if (!symbol) continue;
+    const qty = toNumber(r["Filled"] ?? "");
+    const price = toNumber(r["Avg Price"] ?? "");
+    const ts = parseWebullTimestamp(r["Filled Time"] ?? "");
 
-    const side = normalizeSide(r["Side"]);
-    if (!side) continue;
+    if (!symbol || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || !ts) {
+      skippedFilledCount += 1;
+      continue;
+    }
 
-    const qty = toNumber(r["Filled"]);
-    if (!qty || qty <= 0) continue;
-
-    const avgPx = toNumber(r["Avg Price"]);
-    const pricePx = toNumber(r["Price"]);
-    const px = avgPx ?? pricePx;
-    if (!px || px <= 0) continue;
-
-    const filledTime = parseWebullTimestamp(r["Filled Time"]);
-    const placedTime = parseWebullTimestamp(r["Placed Time"]);
-    const ts = filledTime ?? placedTime;
-    if (!ts) continue;
-
-    const id = makeStableFillId(symbol, side, qty, px, ts);
+    const iso = ts.toISOString();
+    const id = `${symbol}|${side}|${qty}|${price}|${iso}`;
 
     fills.push({
       id,
       symbol,
       side,
       qty,
-      price: px,
+      price,
       ts,
     });
   }
 
-  fills.sort((a, b) => {
-    const t = a.ts.getTime() - b.ts.getTime();
-    if (t !== 0) return t;
-    if (a.side === b.side) return 0;
-    return a.side === "BUY" ? -1 : 1;
-  });
+  const usedCount = fills.length;
+  const skippedCount = filledCount - usedCount;
+
+  if (skippedCount > 0) {
+    warnings.push({
+      level: "info",
+      code: "skipped_filled_rows",
+      message: `Skipped ${skippedCount}/${filledCount} filled row(s) due to missing or invalid fields.`,
+      action: "Check the CSV for blank Filled/Avg Price/Filled Time values",
+      meta: { skippedCount, filledCount },
+    });
+  }
+
+  // sort by time
+  fills.sort((a, b) => a.ts.getTime() - b.ts.getTime());
 
   return {
     fills,
-    stats: { totalRows, filledRows, usedRows: fills.length },
     warnings,
+    rawCount,
+    filledCount,
+    usedCount,
+    skippedCount,
   };
 }
+
+// Back-compat alias (if anything imports the old name)
+export const importWebullOrdersCsv = importWebullOrders;
