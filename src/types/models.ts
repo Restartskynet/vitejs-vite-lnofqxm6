@@ -1,79 +1,77 @@
-export type FillSide = "BUY" | "SELL";
+// src/types/models.ts
 
 export type ImportWarningLevel = "info" | "warn" | "warning" | "error";
 
 export interface ImportWarning {
-  level: WarningLevel;
+  level: ImportWarningLevel;
   message: string;
   action?: string;
 }
 
+export type FillSide = "BUY" | "SELL";
+
 export interface WebullFill {
-  id: string; // stable unique key
+  id: string;
   symbol: string;
   side: FillSide;
   qty: number;
   price: number;
-  ts: Date; // UTC Date created from ET timestamps
+  ts: Date;
 }
 
+export type PositionSide = "LONG" | "SHORT";
+
 export interface Trade {
-  id: string;
+  tradeId: string;
   symbol: string;
-
-  // This is a POSITION SESSION (not individual legs).
-  qty: number; // total shares closed (sum of session sells)
-  entryPrice: number; // weighted avg entry
-  exitPrice: number;  // weighted avg exit
-
-  entryTs: Date;
-  exitTs: Date;
-
-  entryDate: string; // YYYY-MM-DD in MARKET TZ (America/New_York)
-  exitDate: string;  // YYYY-MM-DD in MARKET TZ
-
+  side: PositionSide;
+  openTs: Date;
+  closeTs: Date;
+  qty: number;
+  avgOpen: number;
+  avgClose: number;
   pnl: number;
-  win: boolean;
-  loss: boolean;
-
-  legs: number; // number of sell lots used in the session
+  pnlPct: number;
 }
 
 export interface DailyRow {
-  date: string; // YYYY-MM-DD in MARKET TZ
-  tradePnL: number;
-  tradingEquity: number;
-  accountEquity: number; // Phase 1: same as tradingEquity
-  peakEquity: number;
-  drawdownPct: number; // negative (e.g. -0.12)
+  date: string; // YYYY-MM-DD (market day key)
+  realizedPnl: number;
   wins: number;
   losses: number;
-  tradesClosed: number; // number of sessions closed
+  trades: number;
+  equityClose: number;
+}
+
+export interface StrategyConfig {
+  lowRiskPct: number;
+  highRiskPct: number;
+  lowWinsNeeded: number;
+  highLossesNeeded: number;
 }
 
 export type RiskMode = "LOW" | "HIGH";
 
-export interface StrategyConfig {
-  lowRiskPct: number;      // 0.001 = 0.10%
-  highRiskPct: number;     // 0.03  = 3.00%
-  lowWinsNeeded: number;   // 2
-  highLossesNeeded: number; // 1
-}
-
 export interface RiskState {
   mode: RiskMode;
-  lowWinsProgress: number;
-  asOfCloseDate: string | null;
 
-  todayDate: string;     // next business day after asOfCloseDate
-  tomorrowDate: string;
+  asOfCloseDate: string | null; // last date present in daily[] or null
+  todayDate: string; // market day key
+  tomorrowDate: string; // next market day key
 
+  equityUsed: number;
   todayRiskPct: number;
-  tomorrowBaseRiskPct: number;
+  allowedRiskDollars: number;
+
+  restoreWinsNeeded: number;
+  restoreWinsProgress: number;
+  reason: string;
 
   tomorrowIfWinRiskPct: number;
   tomorrowIfLossRiskPct: number;
+}
 
-  equityAsOfClose: number;
-  allowedRiskDollars: number;
+// KPI/summary object (keep flexible so UI can evolve safely)
+export interface Metrics {
+  [k: string]: number;
 }

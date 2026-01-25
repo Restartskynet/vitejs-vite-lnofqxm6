@@ -1,78 +1,91 @@
+// src/App.tsx
 import { useMemo, useState } from "react";
 import "./index.css";
-
-import type { DailyRow, StrategyConfig, Trade, RiskState } from "./types/models";
-import type { ImportWarning } from "./importers/webullOrdersImporter";
-
-import { importWebullOrdersCsv } from "./importers/webullOrdersImporter";
-import { buildPositionSessions } from "./engine/positionSessions";
-import { aggregateDaily } from "./engine/dailyAggregator";
-import { computeRiskState } from "./engine/riskEngine";
-import { computeMetrics } from "./engine/metrics";
-import { fmtMoney } from "./utils/numbers";
 
 import { UploadCard } from "./components/UploadCard";
 import { HeroRiskPanel } from "./components/HeroRiskPanel";
 import { RiskSizer } from "./components/RiskSizer";
+import { WarningsCard } from "./components/WarningsCard";
 import { KpiCards } from "./components/KpiCards";
 import { EquityChart } from "./components/EquityChart";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { TradesTable } from "./components/TradesTable";
-import { WarningsCard } from "./components/WarningsCard";
-import { Input } from "./components/ui/input";
-import { Card, CardContent } from "./components/ui/card";
+
+import { importWebullOrdersCsv } from "./importers/webullOrdersImporter";
+import { buildPositionSessions } from "./engine/positionSessions";
+import { aggregateDaily } from "./engine/dailyAggregator";
+import { computeMetrics } from "./engine/metrics";
+import { computeRiskState } from "./engine/riskEngine";
+
+import type {
+  DailyRow,
+  ImportWarning,
+  Metrics,
+  StrategyConfig,
+  Trade,
+} from "./types/models";
+
+import { fmtMoney } from "./utils/numbers";
 
 const STRATEGY: StrategyConfig = {
-  lowRiskPct: 0.001,      // 0.10%
-  highRiskPct: 0.03,      // 3.00%
+  lowRiskPct: 0.001,
+  highRiskPct: 0.03,
   lowWinsNeeded: 2,
   highLossesNeeded: 1,
 };
 
+function normalizeWarning(w: string | ImportWarning): ImportWarning {
+  if (typeof w === "string") return { level: "warning", message: w };
+
+  // unify legacy/variant levels
+  if (w.level === "warn") return { ...w, level: "warning" };
+  return w;
+}
+
 export default function App() {
-  const [fileName, setFileName] = useState("");
-  const [startingEquity, setStartingEquity] = useState<number>(20000);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [startingEquity, setStartingEquity] = useState<string>("20000");
 
-  const [warnings, setWarnings] = useState<ImportWarning[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [warnings, setWarnings] = useState<ImportWarning[]>([]);
 
-  // ✅ Derived state recalculates automatically
   const daily: DailyRow[] = useMemo(() => {
     return aggregateDaily(trades, Number(startingEquity));
   }, [trades, startingEquity]);
 
-  const risk: RiskState | null = useMemo(() => {
-    // Always computable (even empty daily)
+  const metrics: Metrics = useMemo(() => {
+    return computeMetrics(trades, daily);
+  }, [trades, daily]);
+
+  const risk = useMemo(() => {
     return computeRiskState(daily, Number(startingEquity), STRATEGY);
   }, [daily, startingEquity]);
 
-  const metrics = useMemo(() => computeMetrics(trades, daily), [trades, daily]);
+  const currentEquity = useMemo(() => {
+    if (!daily.length) return null;
+    return daily[daily.length - 1].equityClose;
+  }, [daily]);
 
   async function handleFile(file: File) {
     setFileName(file.name);
 
     const text = await file.text();
 
+    // 1) Import fills
     const imp = importWebullOrdersCsv(text);
+
+    // 2) Build sessions -> trades (your engine already does this)
     const built = buildPositionSessions(imp.fills);
 
-    const asWarn = (w: string | ImportWarning): ImportWarning => {
-      if (typeof w === "string") return { level: "warn", message: w };
-      return w;
-    };
-    
+    // 3) Normalize warnings into ImportWarning[]
     const nextWarnings: ImportWarning[] = [
-      ...(imp.warnings ?? []).map(asWarn),
-      ...(built.warnings ?? []).map(asWarn),
+      ...(imp.warnings ?? []).map(normalizeWarning),
+      ...(built.warnings ?? []).map(normalizeWarning),
       {
         level: "info",
-        message: `Rows: ${imp.stats.totalRows} • Filled: ${imp.stats.filledRows} • Used: ${imp.stats.usedRows}`,
+        message: `Rows: ${imp.stats.totalRows} • Filled: ${imp.stats.filledRows} • Used: ${imp.stats.usedRows} • Built trades: ${built.trades.length}`,
       },
     ];
-    
-    
-    setWarnings(nextWarnings);
-    
 
     setWarnings(nextWarnings);
     setTrades(built.trades);
@@ -90,50 +103,46 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <UploadCard
-              fileName={fileName}
-              onPickFile={handleFile}
-              metaText={trades.length ? `${trades.length.toLocaleString()} position sessions built` : undefined}
-            />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <UploadCard
+            fileName={fileName}
+            onPickFile={handleFile}
+            metaText={
+              currentEquity === null
+                ? "Upload your Webull Orders CSV to generate the dashboard."
+                : `As-of close: ${daily[daily.length - 1].date} • Equity: ${fmtMoney(currentEquity)} • Trades: ${trades.length}`
+            }
+          />
+
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <div className="text-sm font-semibold text-neutral-900">
+              Starting Equity
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                value={startingEquity}
+                onChange={(e) => setStartingEquity(e.target.value)}
+                className="w-full rounded-xl border px-3 py-2 text-lg"
+              />
+            </div>
+
+            <div className="mt-2 text-xs text-neutral-500">
+              Current equity (if loaded):{" "}
+              <span className="font-semibold text-neutral-800">
+                {currentEquity === null ? "—" : fmtMoney(currentEquity)}
+              </span>
+            </div>
           </div>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-xs text-neutral-500">Starting Equity</div>
-              <div className="mt-2">
-                <Input
-                  type="number"
-                  value={startingEquity}
-                  onChange={(e) => setStartingEquity(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="mt-3 text-xs text-neutral-500">
-                Equity & risk recalc instantly when this changes.
-              </div>
-
-              <div className="mt-3 text-xs text-neutral-600">
-                Current equity (if loaded):{" "}
-                <span className="font-semibold text-neutral-900">
-                  {metrics.endingEquity !== null ? fmtMoney(metrics.endingEquity) : "—"}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
+
+        <HeroRiskPanel risk={risk} cfg={STRATEGY} />
+
+        <RiskSizer risk={risk} />
 
         <WarningsCard warnings={warnings} />
 
-        {risk ? (
-          <>
-            <HeroRiskPanel risk={risk} cfg={STRATEGY} />
-            <RiskSizer risk={risk} />
-          </>
-        ) : null}
-
-        {trades.length > 0 ? <KpiCards m={metrics} /> : null}
+        <KpiCards m={metrics} />
 
         {daily.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -143,12 +152,6 @@ export default function App() {
         ) : null}
 
         {trades.length > 0 ? <TradesTable trades={trades} /> : null}
-
-        {trades.length === 0 ? (
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
-            Upload your Webull Orders CSV to generate the dashboard.
-          </div>
-        ) : null}
       </div>
     </div>
   );
