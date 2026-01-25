@@ -9,6 +9,9 @@ function makeTrade(pnl: number, exitTs: Date): Trade {
   const qty = 1;
   const exitPrice = entryPrice + pnl;
 
+  const denom = entryPrice * qty;
+  const pct = denom > 0 ? pnl / denom : 0;
+
   return {
     id: `T|${exitTs.toISOString()}|${pnl}`,
     symbol: "AAPL",
@@ -20,6 +23,7 @@ function makeTrade(pnl: number, exitTs: Date): Trade {
     entryDate: "2026-01-02",
     exitDate: "2026-01-02",
     pnl,
+    pct,
     win: pnl > 0,
     loss: pnl < 0,
     legs: 2,
@@ -47,7 +51,7 @@ describe("Restart throttle state machine (per-trade)", () => {
     const trades = [
       makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
       makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // LOW progress 1
-      makeTrade(0, new Date("2026-01-02T18:20:00Z")),  // ignored
+      makeTrade(0, new Date("2026-01-02T18:20:00Z")), // ignored
       makeTrade(+1, new Date("2026-01-02T18:30:00Z")), // progress 2 -> HIGH
     ];
 
