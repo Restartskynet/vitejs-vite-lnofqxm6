@@ -1,0 +1,4 @@
+Symbol,Side,Status,Filled,Avg Price,Filled Time
+TSLA,Buy,Partially Filled,1,@200.00,01/02/2026 09:35:00 EST
+TSLA,Buy,Filled,4,@200.00,01/02/2026 09:40:00 EST
+TSLA,Sell,Filled,4,@201.00,01/02/2026 10:10:00 EST
