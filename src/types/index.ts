@@ -1,58 +1,25 @@
 // ============================================================================
-// CORE DATA TYPES
+// APPLICATION TYPES
+// Re-exports engine types and adds app-specific types
 // ============================================================================
 
-export interface Fill {
-  id: string;
-  symbol: string;
-  side: 'BUY' | 'SELL';
-  quantity: number;
-  price: number;
-  filledTime: Date;
-  orderId: string;
-  commission: number;
-}
+// Re-export all engine types for convenience
+export type {
+  Fill,
+  Trade,
+  DailyEquity,
+  RiskState,
+  StrategyConfig,
+  ImportResult,
+  ValidationError,
+  ValidationWarning,
+  CSVPreview,
+  WebullFill,
+} from '../engine/types';
 
-export interface Trade {
-  id: string;
-  symbol: string;
-  side: 'LONG' | 'SHORT';
-  entryDate: Date;
-  exitDate: Date;
-  entryPrice: number;
-  exitPrice: number;
-  quantity: number;
-  pnl: number;
-  pnlPercent: number;
-  commission: number;
-  status: 'WIN' | 'LOSS' | 'BREAKEVEN';
-  riskUsed: number;
-}
-
-export interface DailyEquity {
-  date: string;
-  tradingEquity: number;
-  accountEquity: number;
-  pnl: number;
-  drawdownPct: number;
-  peakEquity: number;
-  tradeCount: number;
-}
-
-export interface RiskState {
-  date: string;
-  mode: 'HIGH' | 'LOW';
-  riskPct: number;
-  allowedRiskDollars: number;
-  equity: number;
-  lowWinsProgress: number;
-  lowWinsNeeded: number;
-}
-
-export interface RiskForecast {
-  ifWin: { mode: 'HIGH' | 'LOW'; riskPct: number };
-  ifLoss: { mode: 'HIGH' | 'LOW'; riskPct: number };
-}
+// ============================================================================
+// APP-SPECIFIC TYPES
+// ============================================================================
 
 export interface CurrentRisk {
   asOfDate: string;
@@ -63,6 +30,11 @@ export interface CurrentRisk {
   lowWinsProgress: number;
   lowWinsNeeded: number;
   forecast: RiskForecast;
+}
+
+export interface RiskForecast {
+  ifWin: { mode: 'HIGH' | 'LOW'; riskPct: number };
+  ifLoss: { mode: 'HIGH' | 'LOW'; riskPct: number };
 }
 
 export interface Adjustment {
@@ -95,7 +67,7 @@ export interface ImportMetadata {
   importedAt: Date;
   rowCount: number;
   fillCount: number;
-  dateRange: { start: string; end: string };
+  dateRange: { start: string; end: string } | null;
 }
 
 export interface Settings {
@@ -103,15 +75,6 @@ export interface Settings {
   startingDate: string;
   strategyId: string;
   theme: 'dark' | 'light';
-}
-
-export interface StrategyConfig {
-  id: string;
-  name: string;
-  highModeRiskPct: number;
-  lowModeRiskPct: number;
-  winsToRecover: number;
-  lossesToDrop: number;
 }
 
 export type UploadStatus = 'idle' | 'uploading' | 'validating' | 'success' | 'error';
@@ -130,6 +93,8 @@ export type Page = 'dashboard' | 'upload' | 'trades' | 'settings';
 // ============================================================================
 // DEFAULT VALUES
 // ============================================================================
+
+import type { StrategyConfig } from '../engine/types';
 
 export const DEFAULT_STRATEGY: StrategyConfig = {
   id: 'restart-throttle',
@@ -176,6 +141,4 @@ export const EMPTY_CURRENT_RISK: CurrentRisk = {
     ifWin: { mode: 'HIGH', riskPct: 0.03 },
     ifLoss: { mode: 'LOW', riskPct: 0.001 },
   },
-// Re-export engine types for convenience
-export type { Fill, Trade, DailyEquity, ImportResult, ValidationError, ValidationWarning, CSVPreview } from '../engine/types';
 };

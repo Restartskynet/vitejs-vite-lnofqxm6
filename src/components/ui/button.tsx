@@ -1,4 +1,4 @@
-import { type ReactNode, type ButtonHTMLAttributes, forwardRef, useState } from 'react';
+import { type ReactNode, type ButtonHTMLAttributes, forwardRef } from 'react';
 import { cn } from '../../lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';

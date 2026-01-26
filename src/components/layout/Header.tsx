@@ -21,7 +21,7 @@ export function Header() {
               <LogoIcon />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Restart's Risk</h1>
+              <h1 className="text-xl font-bold text-white tracking-tight">Restart Risk</h1>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider hidden sm:block">Strategy Dashboard</p>
             </div>
           </div>

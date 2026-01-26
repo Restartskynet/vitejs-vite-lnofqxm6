@@ -55,15 +55,10 @@ export function StrategyExplainer({ className, collapsed = false }: { className?
           </div>
           <ul className="space-y-2 text-sm text-slate-400">
             <li>• Risk {formatPercent(strategy.lowModeRiskPct)} per trade</li>
-            <li>• {strategy.winsToRecover} wins → HIGH mode</li>
+            <li>• {strategy.winsToRecover} consecutive wins → HIGH</li>
             <li>• Loss resets progress</li>
           </ul>
         </div>
-      </div>
-      <div className="mt-5 pt-5 border-t border-white/[0.06]">
-        <p className="text-xs text-slate-500">
-          <strong className="text-slate-400">How it works:</strong> After a losing trade, risk drops to {formatPercent(strategy.lowModeRiskPct)} to protect your capital. Win {strategy.winsToRecover} trades in a row to return to full {formatPercent(strategy.highModeRiskPct)} risk.
-        </p>
       </div>
     </Card>
   );

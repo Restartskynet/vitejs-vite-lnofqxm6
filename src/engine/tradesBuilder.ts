@@ -85,42 +85,32 @@ export function buildTrades(fills: Fill[], startingEquity: number = 25000): Trad
     // If buys came first (by time) and there are more buys or equal, it's a long
     const firstBuy = buyFills[0]?.filledTime.getTime() ?? Infinity;
     const firstSell = sellFills[0]?.filledTime.getTime() ?? Infinity;
+    const isLong = firstBuy <= firstSell;
     
-    const isLong = firstBuy <= firstSell || totalBuyQty >= totalSellQty;
+    // Entry and exit fills based on trade direction
+    const entryFills = isLong ? buyFills : sellFills;
+    const exitFills = isLong ? sellFills : buyFills;
     
-    let entryFills: Fill[];
-    let exitFills: Fill[];
-    let entryQty: number;
-    let exitQty: number;
+    const entryQty = entryFills.reduce((sum, f) => sum + f.quantity, 0);
+    const exitQty = exitFills.reduce((sum, f) => sum + f.quantity, 0);
     
-    if (isLong) {
-      entryFills = buyFills;
-      exitFills = sellFills;
-      entryQty = totalBuyQty;
-      exitQty = totalSellQty;
-    } else {
-      entryFills = sellFills;
-      exitFills = buyFills;
-      entryQty = totalSellQty;
-      exitQty = totalBuyQty;
-    }
-    
-    // Skip if no entry fills
-    if (entryFills.length === 0) continue;
-    
-    const entryPrice = weightedAvgPrice(entryFills);
-    const exitPrice = exitFills.length > 0 ? weightedAvgPrice(exitFills) : null;
-    const entryDate = entryFills[0].filledTime;
-    const exitDate = exitFills.length > 0 ? exitFills[exitFills.length - 1].filledTime : null;
-    
-    const quantity = Math.min(entryQty, exitQty) || entryQty;
-    const remainingQty = entryQty - exitQty;
+    // Calculate position details
+    const quantity = Math.max(entryQty, exitQty);
+    const remainingQty = isLong ? totalBuyQty - totalSellQty : totalSellQty - totalBuyQty;
     const isOpen = remainingQty > 0;
     
-    // Calculate P&L
+    // Prices
+    const entryPrice = weightedAvgPrice(entryFills);
+    const exitPrice = exitFills.length > 0 ? weightedAvgPrice(exitFills) : null;
+    
+    // Dates
+    const entryDate = entryFills[0]?.filledTime ?? new Date();
+    const exitDate = exitFills.length > 0 ? exitFills[exitFills.length - 1].filledTime : null;
+    
+    // P&L calculation
+    const closedQty = Math.min(entryQty, exitQty);
     let realizedPnL = 0;
-    if (exitPrice !== null) {
-      const closedQty = Math.min(entryQty, exitQty);
+    if (exitPrice !== null && closedQty > 0) {
       if (isLong) {
         realizedPnL = (exitPrice - entryPrice) * closedQty;
       } else {
@@ -128,20 +118,21 @@ export function buildTrades(fills: Fill[], startingEquity: number = 25000): Trad
       }
     }
     
-    const commission = totalCommission(entryFills) + totalCommission(exitFills);
+    // Commission
+    const commission = totalCommission(groupFills);
     realizedPnL -= commission;
     
-    // For open positions, we don't have unrealized P&L without current price
+    // Unrealized P&L (would need current price, assume 0 for now)
     const unrealizedPnL = 0;
     const totalPnL = realizedPnL + unrealizedPnL;
     
-    // Calculate P&L percentage based on position value
-    const positionValue = entryPrice * quantity;
-    const pnlPercent = positionValue > 0 ? (realizedPnL / positionValue) * 100 : 0;
+    // P&L percent
+    const costBasis = entryPrice * closedQty;
+    const pnlPercent = costBasis > 0 ? (realizedPnL / costBasis) * 100 : 0;
     
-    // Estimate risk used (simplified - actual would need stop price)
-    const riskUsed = positionValue * 0.02; // Assume 2% stop
-    const riskPercent = startingEquity > 0 ? (riskUsed / startingEquity) * 100 : 0;
+    // Risk calculations (simplified - would need stop price for accurate calc)
+    const riskUsed = startingEquity * 0.03; // Assume 3% risk
+    const riskPercent = 3;
     
     const trade: Trade = {
       id: generateTradeId(symbol, marketDate, tradeIndex++),
@@ -246,8 +237,8 @@ export function calculateMetrics(trades: Trade[]) {
     totalPnL,
     avgWin,
     avgLoss,
-    profitFactor: profitFactor === Infinity ? 999 : profitFactor,
-    maxDrawdownPct: 0, // Calculated separately with equity curve
+    profitFactor: Number.isFinite(profitFactor) ? profitFactor : 0,
+    maxDrawdownPct: 0, // Will be calculated from equity curve
     currentStreak,
     streakType,
     maxConsecutiveWins,

@@ -1,6 +1,6 @@
 import type { Trade } from '../../engine/types';
 import { Badge } from '../ui';
-import { formatMoney, formatPercent, formatDate, formatDateTime, cn } from '../../lib/utils';
+import { formatMoney, formatDate, formatDateTime, cn } from '../../lib/utils';
 
 interface TradeRowProps {
   trade: Trade;
@@ -58,8 +58,8 @@ export function TradeRow({ trade, isExpanded, onToggle }: TradeRowProps) {
           {formatMoney(trade.entryPrice)}
         </td>
         <td className="p-3 text-sm text-right tabular-nums">
-          {trade.status === 'CLOSED' ? (
-            <span className="text-slate-300">{formatMoney(trade.exitPrice!)}</span>
+          {trade.status === 'CLOSED' && trade.exitPrice !== null ? (
+            <span className="text-slate-300">{formatMoney(trade.exitPrice)}</span>
           ) : (
             <span className="text-slate-500">{trade.stopPrice ? formatMoney(trade.stopPrice) : '—'}</span>
           )}

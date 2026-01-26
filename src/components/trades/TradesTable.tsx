@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { Trade } from '../../engine/types';
-import { Card, Badge, Button, SearchInput } from '../ui';
-import { formatMoney, formatPercent, formatDate, formatDateTime, cn } from '../../lib/utils';
+import { Card, Badge, SearchInput } from '../ui';
+import { formatMoney, cn } from '../../lib/utils';
 import { TradeRow } from './TradeRow';
 
 type SortField = 'date' | 'symbol' | 'pnl' | 'pnlPercent' | 'quantity';
@@ -201,14 +201,27 @@ export function TradesTable({ trades, className }: TradesTableProps) {
       </div>
       
       {/* Mobile List */}
-      <div className="md:hidden divide-y divide-white/10">
+      <div className="md:hidden divide-y divide-white/5">
         {filteredTrades.map((trade) => (
-          <MobileTradeCard 
-            key={trade.id} 
-            trade={trade}
-            isExpanded={expandedId === trade.id}
-            onToggle={() => toggleExpand(trade.id)}
-          />
+          <div key={trade.id} className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white">{trade.symbol}</span>
+                <Badge variant={trade.side === 'LONG' ? 'success' : 'danger'} size="sm">
+                  {trade.side}
+                </Badge>
+              </div>
+              <span className={cn('font-semibold', trade.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                {trade.totalPnL >= 0 ? '+' : ''}{formatMoney(trade.totalPnL)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>{trade.quantity} shares @ {formatMoney(trade.entryPrice)}</span>
+              <Badge variant={trade.outcome === 'WIN' ? 'success' : trade.outcome === 'LOSS' ? 'danger' : 'neutral'} size="sm">
+                {trade.outcome}
+              </Badge>
+            </div>
+          </div>
         ))}
         
         {filteredTrades.length === 0 && (
@@ -218,68 +231,5 @@ export function TradesTable({ trades, className }: TradesTableProps) {
         )}
       </div>
     </Card>
-  );
-}
-
-// Mobile card component
-function MobileTradeCard({ trade, isExpanded, onToggle }: { trade: Trade; isExpanded: boolean; onToggle: () => void }) {
-  const outcomeColors = {
-    WIN: 'text-emerald-400 bg-emerald-500/10',
-    LOSS: 'text-red-400 bg-red-500/10',
-    BREAKEVEN: 'text-slate-400 bg-slate-500/10',
-    OPEN: 'text-blue-400 bg-blue-500/10',
-  };
-
-  return (
-    <div className="p-4" onClick={onToggle}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-white">{trade.symbol}</span>
-          <Badge variant={trade.side === 'LONG' ? 'success' : 'danger'} size="sm">
-            {trade.side}
-          </Badge>
-        </div>
-        <span className={cn('text-lg font-bold', trade.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-          {formatMoney(trade.totalPnL)}
-        </span>
-      </div>
-      
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-slate-500">{formatDate(trade.entryDate)}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">{trade.quantity} shares</span>
-          <span className={cn('px-2 py-0.5 rounded text-xs', outcomeColors[trade.outcome])}>
-            {trade.outcome}
-          </span>
-        </div>
-      </div>
-      
-      {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-white/10 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Entry Price</span>
-            <span className="text-white">{formatMoney(trade.entryPrice)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Exit Price</span>
-            <span className="text-white">{trade.exitPrice ? formatMoney(trade.exitPrice) : '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Risk Used</span>
-            <span className="text-white">{formatMoney(trade.riskUsed)} ({formatPercent(trade.riskPercent / 100, 2)})</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Commission</span>
-            <span className="text-white">{formatMoney(trade.commission)}</span>
-          </div>
-          {trade.durationMinutes !== null && (
-            <div className="flex justify-between">
-              <span className="text-slate-500">Duration</span>
-              <span className="text-white">{trade.durationMinutes} min</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   );
 }

@@ -59,10 +59,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 Input.displayName = 'Input';
 
 export const CurrencyInput = forwardRef<HTMLInputElement, Omit<InputProps, 'prefix' | 'type'>>(
-  ({ ...props }, ref) => {
+  (props, ref) => {
     return <Input ref={ref} type="number" prefix={<span className="text-sm">$</span>} step="0.01" min="0" {...props} />;
   }
 );
+
+CurrencyInput.displayName = 'CurrencyInput';
+
 // Search input with icon
 interface SearchInputProps extends Omit<InputProps, 'prefix'> {
   onClear?: () => void;
@@ -109,5 +112,3 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
 );
 
 SearchInput.displayName = 'SearchInput';
-
-CurrencyInput.displayName = 'CurrencyInput';

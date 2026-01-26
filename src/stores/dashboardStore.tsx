@@ -1,25 +1,9 @@
 import React, { createContext, useContext, useReducer, useCallback, type ReactNode } from 'react';
-import type { Fill, Trade, DailyEquity, ImportResult, Metrics, Settings, UploadStatus } from '../types';
+import type { Fill, Trade, DailyEquity, ImportResult } from '../engine/types';
+import type { Metrics, Settings, UploadStatus, CurrentRisk } from '../types';
 import { DEFAULT_SETTINGS, EMPTY_METRICS, EMPTY_CURRENT_RISK } from '../types';
-import type { RiskState } from '../engine/types';
 import { buildTrades, calculateMetrics } from '../engine/tradesBuilder';
 import { getCurrentRisk, calculateDailyEquity, calculateMaxDrawdown, DEFAULT_STRATEGY } from '../engine/riskEngine';
-
-// Extended CurrentRisk type with forecast
-interface CurrentRiskWithForecast {
-  date: string;
-  mode: 'HIGH' | 'LOW';
-  riskPct: number;
-  allowedRiskDollars: number;
-  equity: number;
-  lowWinsProgress: number;
-  lowWinsNeeded: number;
-  lastTradeOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | null;
-  forecast: {
-    ifWin: { mode: 'HIGH' | 'LOW'; riskPct: number };
-    ifLoss: { mode: 'HIGH' | 'LOW'; riskPct: number };
-  };
-}
 
 // ============================================================================
 // STATE INTERFACE
@@ -39,7 +23,7 @@ interface DashboardState {
   // Derived data
   trades: Trade[];
   dailyEquity: DailyEquity[];
-  currentRisk: CurrentRiskWithForecast;
+  currentRisk: CurrentRisk;
   metrics: Metrics;
 
   // User config
@@ -64,20 +48,7 @@ const initialState: DashboardState = {
   importMetadata: null,
   trades: [],
   dailyEquity: [],
-  currentRisk: {
-    date: new Date().toISOString().split('T')[0],
-    mode: 'HIGH',
-    riskPct: 0.03,
-    allowedRiskDollars: 0,
-    equity: 0,
-    lowWinsProgress: 0,
-    lowWinsNeeded: 2,
-    lastTradeOutcome: null,
-    forecast: {
-      ifWin: { mode: 'HIGH', riskPct: 0.03 },
-      ifLoss: { mode: 'LOW', riskPct: 0.001 },
-    },
-  },
+  currentRisk: EMPTY_CURRENT_RISK,
   metrics: EMPTY_METRICS,
   settings: DEFAULT_SETTINGS,
   adjustments: [],
@@ -95,11 +66,11 @@ type Action =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_UPLOAD_STATUS'; payload: UploadStatus }
   | { type: 'SET_UPLOAD_RESULT'; payload: ImportResult | null }
-  | { type: 'IMPORT_FILLS'; payload: { fills: Fill[]; metadata: DashboardState['importMetadata'] } }
+  | { type: 'IMPORT_FILLS'; payload: { fills: Fill[]; metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null } } }
   | { type: 'PROCESS_DATA' }
   | { type: 'SET_SETTINGS'; payload: Partial<Settings> }
-  | { type: 'ADD_ADJUSTMENT'; payload: DashboardState['adjustments'][0] }
-  | { type: 'UPDATE_ADJUSTMENT'; payload: DashboardState['adjustments'][0] }
+  | { type: 'ADD_ADJUSTMENT'; payload: { id: string; date: string; type: 'Deposit' | 'Withdrawal' | 'Fee' | 'Correction'; amount: number; note: string } }
+  | { type: 'UPDATE_ADJUSTMENT'; payload: { id: string; date: string; type: 'Deposit' | 'Withdrawal' | 'Fee' | 'Correction'; amount: number; note: string } }
   | { type: 'DELETE_ADJUSTMENT'; payload: string }
   | { type: 'CLEAR_DATA' };
 
@@ -132,22 +103,27 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       // Get current risk state
       const riskState = getCurrentRisk(trades, state.settings.startingEquity, DEFAULT_STRATEGY);
       
-      const currentRisk: CurrentRiskWithForecast = {
-        date: riskState.date,
+      const currentRisk: CurrentRisk = {
+        asOfDate: riskState.date,
         mode: riskState.mode,
-        riskPct: riskState.riskPct,
+        todayRiskPct: riskState.riskPct,
         allowedRiskDollars: riskState.allowedRiskDollars,
         equity: riskState.equity,
         lowWinsProgress: riskState.lowWinsProgress,
         lowWinsNeeded: riskState.lowWinsNeeded,
-        lastTradeOutcome: riskState.lastTradeOutcome,
         forecast: riskState.forecast,
       };
 
       return {
         ...state,
         fills,
-        importMetadata: metadata,
+        importMetadata: {
+          fileName: metadata.fileName,
+          importedAt: new Date(),
+          rowCount: metadata.rowCount,
+          fillCount: metadata.fillCount,
+          dateRange: metadata.dateRange,
+        },
         trades,
         dailyEquity,
         currentRisk,
@@ -165,15 +141,14 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       metrics.maxDrawdownPct = calculateMaxDrawdown(dailyEquity);
       const riskState = getCurrentRisk(trades, state.settings.startingEquity, DEFAULT_STRATEGY);
       
-      const currentRisk: CurrentRiskWithForecast = {
-        date: riskState.date,
+      const currentRisk: CurrentRisk = {
+        asOfDate: riskState.date,
         mode: riskState.mode,
-        riskPct: riskState.riskPct,
+        todayRiskPct: riskState.riskPct,
         allowedRiskDollars: riskState.allowedRiskDollars,
         equity: riskState.equity,
         lowWinsProgress: riskState.lowWinsProgress,
         lowWinsNeeded: riskState.lowWinsNeeded,
-        lastTradeOutcome: riskState.lastTradeOutcome,
         forecast: riskState.forecast,
       };
 
@@ -197,15 +172,14 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
         metrics.maxDrawdownPct = calculateMaxDrawdown(dailyEquity);
         const riskState = getCurrentRisk(trades, newSettings.startingEquity, DEFAULT_STRATEGY);
         
-        const currentRisk: CurrentRiskWithForecast = {
-          date: riskState.date,
+        const currentRisk: CurrentRisk = {
+          asOfDate: riskState.date,
           mode: riskState.mode,
-          riskPct: riskState.riskPct,
+          todayRiskPct: riskState.riskPct,
           allowedRiskDollars: riskState.allowedRiskDollars,
           equity: riskState.equity,
           lowWinsProgress: riskState.lowWinsProgress,
           lowWinsNeeded: riskState.lowWinsNeeded,
-          lastTradeOutcome: riskState.lastTradeOutcome,
           forecast: riskState.forecast,
         };
 
@@ -258,11 +232,11 @@ interface DashboardContextValue {
     setLoading: (isLoading: boolean) => void;
     setUploadStatus: (status: UploadStatus) => void;
     setUploadResult: (result: ImportResult | null) => void;
-    importFills: (fills: Fill[], metadata: DashboardState['importMetadata']) => void;
+    importFills: (fills: Fill[], metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }) => void;
     processData: () => void;
     updateSettings: (settings: Partial<Settings>) => void;
-    addAdjustment: (adjustment: DashboardState['adjustments'][0]) => void;
-    updateAdjustment: (adjustment: DashboardState['adjustments'][0]) => void;
+    addAdjustment: (adjustment: { id: string; date: string; type: 'Deposit' | 'Withdrawal' | 'Fee' | 'Correction'; amount: number; note: string }) => void;
+    updateAdjustment: (adjustment: { id: string; date: string; type: 'Deposit' | 'Withdrawal' | 'Fee' | 'Correction'; amount: number; note: string }) => void;
     deleteAdjustment: (id: string) => void;
     clearData: () => void;
   };
@@ -287,7 +261,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setUploadResult: useCallback((result: ImportResult | null) => {
       dispatch({ type: 'SET_UPLOAD_RESULT', payload: result });
     }, []),
-    importFills: useCallback((fills: Fill[], metadata: DashboardState['importMetadata']) => {
+    importFills: useCallback((fills: Fill[], metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }) => {
       dispatch({ type: 'IMPORT_FILLS', payload: { fills, metadata } });
     }, []),
     processData: useCallback(() => {
@@ -296,10 +270,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     updateSettings: useCallback((settings: Partial<Settings>) => {
       dispatch({ type: 'SET_SETTINGS', payload: settings });
     }, []),
-    addAdjustment: useCallback((adjustment: DashboardState['adjustments'][0]) => {
+    addAdjustment: useCallback((adjustment: { id: string; date: string; type: 'Deposit' | 'Withdrawal' | 'Fee' | 'Correction'; amount: number; note: string }) => {
       dispatch({ type: 'ADD_ADJUSTMENT', payload: adjustment });
     }, []),
-    updateAdjustment: useCallback((adjustment: DashboardState['adjustments'][0]) => {
+    updateAdjustment: useCallback((adjustment: { id: string; date: string; type: 'Deposit' | 'Withdrawal' | 'Fee' | 'Correction'; amount: number; note: string }) => {
       dispatch({ type: 'UPDATE_ADJUSTMENT', payload: adjustment });
     }, []),
     deleteAdjustment: useCallback((id: string) => {

@@ -14,7 +14,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
       <footer className="border-t border-white/[0.06] mt-12 py-6 hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-500">
-            <p>Restart's Risk Strategy Dashboard • Deterministic position management</p>
+            <p>Restart Risk Strategy Dashboard • Deterministic position management</p>
             <p>Local-first • Your data never leaves your device</p>
           </div>
         </div>

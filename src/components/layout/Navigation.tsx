@@ -42,13 +42,16 @@ export function Navigation({ showLabels = true }: { showLabels?: boolean }) {
           to={item.path}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150',
-              isActive ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+              'flex items-center gap-2 px-3 py-2 rounded-lg transition-all',
+              'text-sm font-medium',
+              isActive
+                ? 'bg-white/10 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
             )
           }
         >
           {item.icon}
-          {showLabels && <span className="hidden sm:inline">{item.label}</span>}
+          {showLabels && <span>{item.label}</span>}
         </NavLink>
       ))}
     </nav>
@@ -57,21 +60,23 @@ export function Navigation({ showLabels = true }: { showLabels?: boolean }) {
 
 export function MobileNavigation() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.06] bg-slate-950/95 backdrop-blur-xl sm:hidden">
-      <div className="flex items-center justify-around py-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 sm:hidden bg-slate-950/95 backdrop-blur-xl border-t border-white/[0.06]">
+      <div className="flex items-center justify-around h-16">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             className={({ isActive }) =>
               cn(
-                'flex flex-col items-center gap-1 px-4 py-2 rounded-xl text-xs font-medium transition-all',
-                isActive ? 'text-blue-400' : 'text-slate-500 hover:text-white'
+                'flex flex-col items-center justify-center gap-1 w-16 py-2 rounded-lg transition-all',
+                isActive
+                  ? 'text-blue-400'
+                  : 'text-slate-500'
               )
             }
           >
             {item.icon}
-            <span>{item.label}</span>
+            <span className="text-[10px] font-medium">{item.label}</span>
           </NavLink>
         ))}
       </div>

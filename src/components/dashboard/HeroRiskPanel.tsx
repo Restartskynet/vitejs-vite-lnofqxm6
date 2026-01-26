@@ -22,7 +22,7 @@ const UploadIcon = () => (
 );
 
 export function HeroRiskPanel({ className }: { className?: string }) {
-  const { hasData, currentRisk } = useDashboardState();
+  const { hasData, currentRisk, settings } = useDashboardState();
   const isHigh = currentRisk.mode === 'HIGH';
 
   return (
@@ -51,59 +51,64 @@ export function HeroRiskPanel({ className }: { className?: string }) {
                   </span>
                   <span className={cn('text-4xl sm:text-5xl font-bold', isHigh ? 'text-emerald-400/60' : 'text-amber-400/60')}>%</span>
                 </div>
+                <p className="text-slate-400 mt-3">
+                  Max risk: <span className="text-white font-semibold">{formatMoney(currentRisk.allowedRiskDollars)}</span>
+                  <span className="text-slate-600 mx-2">•</span>
+                  Equity: <span className="text-white font-semibold">{formatMoney(currentRisk.equity)}</span>
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                <div>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Allowed Risk</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums">{formatMoney(currentRisk.allowedRiskDollars)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Account Equity</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums">{formatMoney(currentRisk.equity)}</p>
-                </div>
-              </div>
-
+              {/* Forecast */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4">
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-emerald-400"><ArrowUpIcon /></span>
-                    <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">If Win</span>
+                    <ArrowUpIcon />
+                    <span className="text-xs text-emerald-400 font-medium uppercase">If Win</span>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-400 tabular-nums">{formatPercent(currentRisk.forecast.ifWin.riskPct)}</p>
-                  <p className="text-xs text-slate-500 mt-1">→ {currentRisk.forecast.ifWin.mode}</p>
+                  <p className="text-2xl font-bold text-emerald-400">
+                    {formatPercent(currentRisk.forecast.ifWin.riskPct)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">{currentRisk.forecast.ifWin.mode} mode</p>
                 </div>
-                <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
+
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-red-400"><ArrowDownIcon /></span>
-                    <span className="text-[10px] text-red-400 font-semibold uppercase tracking-wider">If Loss</span>
+                    <ArrowDownIcon />
+                    <span className="text-xs text-red-400 font-medium uppercase">If Loss</span>
                   </div>
-                  <p className="text-2xl font-bold text-red-400 tabular-nums">{formatPercent(currentRisk.forecast.ifLoss.riskPct)}</p>
-                  <p className="text-xs text-slate-500 mt-1">→ {currentRisk.forecast.ifLoss.mode}</p>
+                  <p className="text-2xl font-bold text-red-400">
+                    {formatPercent(currentRisk.forecast.ifLoss.riskPct)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">{currentRisk.forecast.ifLoss.mode} mode</p>
                 </div>
               </div>
-
-              {currentRisk.mode === 'LOW' && (
-                <div className="mt-6 pt-6 border-t border-white/10">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-400">Recovery Progress</span>
-                    <span className="text-sm font-medium text-white">{currentRisk.lowWinsProgress} / {currentRisk.lowWinsNeeded} wins</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500" style={{ width: `${(currentRisk.lowWinsProgress / currentRisk.lowWinsNeeded) * 100}%` }} />
-                  </div>
-                </div>
-              )}
             </>
           ) : (
+            // Empty state
             <div className="text-center py-8">
               <div className="w-20 h-20 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center mx-auto mb-5">
-                <span className="text-blue-400"><UploadIcon /></span>
+                <UploadIcon />
               </div>
-              <p className="text-xl font-bold text-white mb-2">Upload trades to see your risk</p>
-              <p className="text-sm text-slate-400 max-w-xs mx-auto mb-6">Import your Webull CSV to calculate your exact position sizing</p>
-              <Link to="/upload" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors">
-                Upload CSV
+              <h3 className="text-2xl font-bold text-white mb-2">Pre-Market Risk Output</h3>
+              <p className="text-slate-400 mb-4 max-w-sm mx-auto">
+                Import your Webull CSV to calculate your risk allocation
+              </p>
+              <div className="space-y-2 text-left max-w-xs mx-auto">
+                <p className="text-sm text-slate-500">
+                  <span className="text-white font-semibold">Starting equity:</span> {formatMoney(settings.startingEquity)}
+                </p>
+                <p className="text-sm text-slate-500">
+                  <span className="text-white font-semibold">Initial risk:</span> 3.00% ({formatMoney(settings.startingEquity * 0.03)})
+                </p>
+              </div>
+              <Link 
+                to="/upload" 
+                className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                Import Trades
               </Link>
             </div>
           )}
