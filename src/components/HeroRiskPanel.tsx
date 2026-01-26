@@ -1,6 +1,4 @@
 import type { RiskState, StrategyConfig } from "../types/models";
-import { Badge } from "./ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { fmtMoney, fmtPct } from "../utils/numbers";
 import { explainMode } from "../engine/explain";
 
@@ -12,7 +10,6 @@ export function HeroRiskPanel({
   cfg: StrategyConfig;
 }) {
   const mode = risk.mode;
-  const theme = mode === "HIGH" ? "destructive" : "secondary";
   const e = explainMode(risk, cfg);
 
   const nextWinLabel = risk.tomorrowIfWinRiskPct === cfg.highRiskPct ? "HIGH" : "LOW";

@@ -1,7 +1,4 @@
 import { useRef } from "react";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
 import { Upload, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 export function UploadCard(props: {
@@ -11,7 +8,6 @@ export function UploadCard(props: {
   setStartingEquity: (next: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
-
   const canUpload = props.status !== "loading";
 
   const statusConfig = {

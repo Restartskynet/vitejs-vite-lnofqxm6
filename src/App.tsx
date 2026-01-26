@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { DailyRow, ImportWarning, Metrics, RiskState, Trade } from "./types/models";
 import { importWebullOrders } from "./importers/webullOrdersImporter";
 import { buildPositionSessions } from "./engine/positionSessions";
@@ -55,10 +55,6 @@ export default function App() {
     return computeRiskState(trades, startingEquityNum, STRATEGY);
   }, [trades, startingEquityNum]);
 
-  useEffect(() => {
-    setRisk(derivedRisk);
-  }, [derivedRisk]);
-
   async function handleFile(file: File) {
     setStatus("loading");
     setWarnings([]);
@@ -87,6 +83,7 @@ export default function App() {
 
       const d = aggregateDaily(sessions.trades, startingEquityNum);
       setMetrics(computeMetrics(sessions.trades, d));
+      setRisk(computeRiskState(sessions.trades, startingEquityNum, STRATEGY));
 
       setMetaText(
         `Imported: ${file.name} • Days: ${d.length} • Last: ${d.length ? d[d.length - 1].date : "—"} • Equity: ${

@@ -1,13 +1,5 @@
-import { Card, CardContent } from "./ui/card";
-import { Badge } from "./ui/badge";
-import type { ImportWarning } from "../types/models";
 import { AlertTriangle, Info, XCircle } from "lucide-react";
-
-function badgeVariant(level: ImportWarning["level"]) {
-  if (level === "error") return "destructive";
-  if (level === "warning" || level === "warn") return "secondary";
-  return "outline";
-}
+import type { ImportWarning } from "../types/models";
 
 export function WarningsCard({ warnings }: { warnings: ImportWarning[] }) {
   if (!warnings?.length) {
@@ -57,5 +49,3 @@ export function WarningsCard({ warnings }: { warnings: ImportWarning[] }) {
     </div>
   );
 }
-
-export default WarningsCard;

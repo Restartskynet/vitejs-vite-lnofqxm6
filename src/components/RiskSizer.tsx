@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
 import type { RiskState } from "../types/models";
 import { fmtMoney } from "../utils/numbers";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
 
 function safeNum(s: string): number | null {
   const n = Number(s);
@@ -62,62 +60,67 @@ export function RiskSizer({ risk }: { risk: RiskState }) {
   }, [entry, stop, risk.allowedRiskDollars, risk.equityAsOfClose]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Position Sizer (Entry / Stop → Max Shares)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <div className="mb-1 text-xs text-neutral-500">Entry</div>
-            <Input value={entry} onChange={(e) => setEntry(e.target.value)} />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-neutral-500">Stop</div>
-            <Input value={stop} onChange={(e) => setStop(e.target.value)} />
-          </div>
-
-          <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-            {calc ? (
-              calc.ok ? (
-                <div className="space-y-1">
-                  <div className="text-xs text-neutral-500">Risk / share</div>
-                  <div className="text-lg font-bold text-neutral-900">
-                    {fmtMoney(calc.perShare)}
-                  </div>
-
-                  <div className="text-xs text-neutral-500">Max shares</div>
-                  <div className="text-2xl font-black text-neutral-900">
-                    {calc.maxShares.toLocaleString()}
-                  </div>
-
-                  <div className="text-xs text-neutral-500">Risk used</div>
-                  <div className="text-sm font-semibold text-neutral-900">
-                    {fmtMoney(calc.riskUsed)}
-                  </div>
-
-                  <div className="text-xs text-neutral-500">Position value</div>
-                  <div className="text-sm font-semibold text-neutral-900">
-                    {fmtMoney(calc.positionValue)}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold text-red-600">
-                    ⚠️ {calc.error}
-                  </div>
-                  <div className="text-xs text-neutral-700">
-                    {calc.suggestion}
-                  </div>
-                </div>
-              )
-            ) : (
-              <div className="text-sm text-neutral-600">Enter valid Entry + Stop</div>
-            )}
-          </div>
+    <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 backdrop-blur-sm">
+      <h3 className="text-lg font-semibold text-white mb-4">Position Sizer (Entry / Stop → Max Shares)</h3>
+      
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div>
+          <div className="mb-1 text-xs text-slate-400">Entry</div>
+          <input 
+            value={entry} 
+            onChange={(e) => setEntry(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900/50 px-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-600/50"
+          />
         </div>
-      </CardContent>
-    </Card>
+
+        <div>
+          <div className="mb-1 text-xs text-slate-400">Stop</div>
+          <input 
+            value={stop} 
+            onChange={(e) => setStop(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900/50 px-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-600/50"
+          />
+        </div>
+
+        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+          {calc ? (
+            calc.ok ? (
+              <div className="space-y-1">
+                <div className="text-xs text-slate-400">Risk / share</div>
+                <div className="text-lg font-bold text-white">
+                  {fmtMoney(calc.perShare)}
+                </div>
+
+                <div className="text-xs text-slate-400">Max shares</div>
+                <div className="text-2xl font-black text-white">
+                  {calc.maxShares.toLocaleString()}
+                </div>
+
+                <div className="text-xs text-slate-400">Risk used</div>
+                <div className="text-sm font-semibold text-white">
+                  {fmtMoney(calc.riskUsed)}
+                </div>
+
+                <div className="text-xs text-slate-400">Position value</div>
+                <div className="text-sm font-semibold text-white">
+                  {fmtMoney(calc.positionValue)}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-red-400">
+                  ⚠️ {calc.error}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {calc.suggestion}
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="text-sm text-slate-500">Enter valid Entry + Stop</div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
