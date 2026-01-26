@@ -1,6 +1,6 @@
 # SizingSpec — Position Sizer (v1 Minimal)
 
-Last Updated: 2026-01-25  
+Last Updated: 2026-01-26 
 Scope: Phase 1 (MVP) — Simple risk-to-shares conversion
 
 ## 1. Goal
