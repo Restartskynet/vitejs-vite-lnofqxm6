@@ -1,19 +1,180 @@
-import * as React from "react";
-import { cn } from "../../lib/utils";
+import { type InputHTMLAttributes, forwardRef, type ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 
-export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => {
+interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+  label?: string;
+  helper?: string;
+  error?: string;
+  prefix?: ReactNode;
+  suffix?: ReactNode;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+const sizeClasses = {
+  sm: 'h-9 text-sm',
+  md: 'h-12 text-base',
+  lg: 'h-14 text-lg',
+};
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  (
+    {
+      label,
+      helper,
+      error,
+      prefix,
+      suffix,
+      size = 'md',
+      className,
+      id,
+      ...props
+    },
+    ref
+  ) => {
+    const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+
     return (
-      <input
-        ref={ref}
-        className={cn(
-          "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm " +
-            "outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
-          className
+      <div className="w-full">
+        {label && (
+          <label
+            htmlFor={inputId}
+            className="block text-[10px] font-medium uppercase tracking-wider text-slate-500 mb-1.5"
+          >
+            {label}
+          </label>
         )}
+        <div className="relative">
+          {prefix && (
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+              {prefix}
+            </span>
+          )}
+          <input
+            ref={ref}
+            id={inputId}
+            className={cn(
+              'w-full rounded-xl bg-white/[0.05] border border-white/10 text-white font-medium',
+              'placeholder:text-slate-600',
+              'focus:outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'transition-all duration-150',
+              sizeClasses[size],
+              prefix && 'pl-8',
+              suffix && 'pr-8',
+              !prefix && 'pl-4',
+              !suffix && 'pr-4',
+              error && 'border-red-500/60 focus:border-red-500/60 focus:ring-red-500/20',
+              className
+            )}
+            {...props}
+          />
+          {suffix && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+              {suffix}
+            </span>
+          )}
+        </div>
+        {(helper || error) && (
+          <p
+            className={cn(
+              'mt-1.5 text-xs',
+              error ? 'text-red-400' : 'text-slate-500'
+            )}
+          >
+            {error || helper}
+          </p>
+        )}
+      </div>
+    );
+  }
+);
+
+Input.displayName = 'Input';
+
+// Specialized currency input
+interface CurrencyInputProps extends Omit<InputProps, 'prefix' | 'type'> {
+  currency?: string;
+}
+
+export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
+  ({ currency = '$', ...props }, ref) => {
+    return (
+      <Input
+        ref={ref}
+        type="number"
+        prefix={<span className="text-sm">{currency}</span>}
+        step="0.01"
+        min="0"
         {...props}
       />
     );
   }
 );
-Input.displayName = "Input";
+
+CurrencyInput.displayName = 'CurrencyInput';
+
+// Specialized percentage input
+export const PercentInput = forwardRef<HTMLInputElement, Omit<InputProps, 'suffix' | 'type'>>(
+  (props, ref) => {
+    return (
+      <Input
+        ref={ref}
+        type="number"
+        suffix={<span className="text-sm">%</span>}
+        step="0.01"
+        min="0"
+        max="100"
+        {...props}
+      />
+    );
+  }
+);
+
+PercentInput.displayName = 'PercentInput';
+
+// Search input with icon
+interface SearchInputProps extends Omit<InputProps, 'prefix'> {
+  onClear?: () => void;
+}
+
+export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
+  ({ onClear, value, ...props }, ref) => {
+    return (
+      <div className="relative">
+        <svg
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+          />
+        </svg>
+        <Input
+          ref={ref}
+          type="search"
+          value={value}
+          className="pl-10"
+          {...props}
+        />
+        {value && onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/10 text-slate-500 hover:text-white transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+    );
+  }
+);
+
+SearchInput.displayName = 'SearchInput';

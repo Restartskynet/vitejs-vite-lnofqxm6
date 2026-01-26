@@ -1,95 +1,223 @@
-import type { RiskState, StrategyConfig } from "../types/models";
-import { fmtMoney, fmtPct } from "../utils/numbers";
-import { explainMode } from "../engine/explain";
+import { useDashboardState } from '../../stores/dashboardStore';
+import { Card } from '../ui';
+import { Badge } from '../ui';
+import { formatMoney, formatPercent, formatDate, cn } from '../../lib/utils';
+import { Link } from 'react-router-dom';
 
-export function HeroRiskPanel({
-  risk,
-  cfg,
-}: {
-  risk: RiskState;
-  cfg: StrategyConfig;
-}) {
-  const mode = risk.mode;
-  const e = explainMode(risk, cfg);
+// Icons
+const ArrowUpIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+  </svg>
+);
 
-  const nextWinLabel = risk.tomorrowIfWinRiskPct === cfg.highRiskPct ? "HIGH" : "LOW";
-  const nextLossLabel = risk.tomorrowIfLossRiskPct === cfg.highRiskPct ? "HIGH" : "LOW";
+const ArrowDownIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+  </svg>
+);
+
+const UploadIcon = () => (
+  <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+    />
+  </svg>
+);
+
+interface HeroRiskPanelProps {
+  className?: string;
+}
+
+export function HeroRiskPanel({ className }: HeroRiskPanelProps) {
+  const { hasData, currentRisk } = useDashboardState();
+
+  const isHigh = currentRisk.mode === 'HIGH';
+  const modeColor = isHigh ? 'emerald' : 'amber';
 
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-800/50 backdrop-blur-sm overflow-hidden">
-      {/* Header with Glow Badge */}
-      <div className="p-6 pb-4 border-b border-slate-700/50">
-        <div className="flex items-center justify-between">
-          <span className="text-lg font-semibold text-white">Pre-Market Risk Output</span>
-          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-sm ${
-            mode === "HIGH" 
-              ? "bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 text-emerald-400 border-emerald-500/30" 
-              : "bg-gradient-to-r from-amber-500/20 to-orange-600/20 text-amber-400 border-amber-500/30"
-          } font-semibold text-sm uppercase tracking-wider shadow-lg`}>
-            <div className={`w-2 h-2 rounded-full ${mode === "HIGH" ? "bg-emerald-400" : "bg-amber-400"} animate-pulse`} />
-            {mode}
-          </div>
+    <Card
+      glow={hasData ? (isHigh ? 'success' : 'warning') : 'none'}
+      noPadding
+      className={className}
+    >
+      <div className="relative overflow-hidden p-6 sm:p-8">
+        {/* Background gradient */}
+        {hasData && (
+          <div
+            className={cn(
+              'absolute inset-0 opacity-30 pointer-events-none',
+              isHigh
+                ? 'bg-gradient-to-br from-emerald-600/30 via-transparent to-transparent'
+                : 'bg-gradient-to-br from-amber-600/30 via-transparent to-transparent'
+            )}
+          />
+        )}
+
+        <div className="relative">
+          {hasData ? (
+            <>
+              {/* Top row: Mode Badge + Date */}
+              <div className="flex items-center justify-between mb-8">
+                <Badge
+                  variant={isHigh ? 'high' : 'low'}
+                  size="lg"
+                  pulse
+                >
+                  {currentRisk.mode} Mode
+                </Badge>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    As of
+                  </p>
+                  <p className="text-sm text-slate-300 font-medium">
+                    {formatDate(currentRisk.asOfDate)}
+                  </p>
+                </div>
+              </div>
+
+              {/* HERO NUMBER */}
+              <div className="mb-10">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium">
+                  Today's Risk
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={cn(
+                      'text-7xl sm:text-8xl lg:text-9xl font-black tracking-tighter tabular-nums',
+                      isHigh ? 'text-emerald-400' : 'text-amber-400'
+                    )}
+                    style={{ fontFeatureSettings: '"tnum"', lineHeight: 1 }}
+                  >
+                    {(currentRisk.todayRiskPct * 100).toFixed(2)}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-4xl sm:text-5xl font-bold',
+                      isHigh ? 'text-emerald-400/60' : 'text-amber-400/60'
+                    )}
+                  >
+                    %
+                  </span>
+                </div>
+              </div>
+
+              {/* Allowed Risk & Equity */}
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                    Allowed Risk
+                  </p>
+                  <p
+                    className="text-2xl sm:text-3xl font-bold text-white tabular-nums"
+                    style={{ fontFeatureSettings: '"tnum"' }}
+                  >
+                    {formatMoney(currentRisk.allowedRiskDollars)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                    Account Equity
+                  </p>
+                  <p
+                    className="text-2xl sm:text-3xl font-bold text-white tabular-nums"
+                    style={{ fontFeatureSettings: '"tnum"' }}
+                  >
+                    {formatMoney(currentRisk.equity)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tomorrow Scenarios */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-emerald-400">
+                      <ArrowUpIcon />
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">
+                      If Win
+                    </span>
+                  </div>
+                  <p
+                    className="text-2xl font-bold text-emerald-400 tabular-nums"
+                    style={{ fontFeatureSettings: '"tnum"' }}
+                  >
+                    {formatPercent(currentRisk.forecast.ifWin.riskPct)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    → {currentRisk.forecast.ifWin.mode}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-red-400">
+                      <ArrowDownIcon />
+                    </span>
+                    <span className="text-[10px] text-red-400 font-semibold uppercase tracking-wider">
+                      If Loss
+                    </span>
+                  </div>
+                  <p
+                    className="text-2xl font-bold text-red-400 tabular-nums"
+                    style={{ fontFeatureSettings: '"tnum"' }}
+                  >
+                    {formatPercent(currentRisk.forecast.ifLoss.riskPct)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    → {currentRisk.forecast.ifLoss.mode}
+                  </p>
+                </div>
+              </div>
+
+              {/* LOW Mode Progress */}
+              {currentRisk.mode === 'LOW' && (
+                <div className="mt-6 pt-6 border-t border-white/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-slate-400">Recovery Progress</span>
+                    <span className="text-sm font-medium text-white">
+                      {currentRisk.lowWinsProgress} / {currentRisk.lowWinsNeeded} wins
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
+                      style={{
+                        width: `${(currentRisk.lowWinsProgress / currentRisk.lowWinsNeeded) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Empty State */
+            <div className="text-center py-8">
+              <div className="w-20 h-20 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center mx-auto mb-5">
+                <span className="text-blue-400">
+                  <UploadIcon />
+                </span>
+              </div>
+              <p className="text-xl font-bold text-white mb-2">
+                Upload trades to see your risk
+              </p>
+              <p className="text-sm text-slate-400 max-w-xs mx-auto mb-6">
+                Import your Webull CSV to calculate your exact position sizing
+              </p>
+              <Link
+                to="/upload"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+              >
+                <UploadIcon />
+                Upload CSV
+              </Link>
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="p-6 space-y-4">
-        {/* Risk Metrics Grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-            <div className="text-xs text-slate-400">Risk % to use</div>
-            <div className="text-2xl font-bold text-white mt-1">{fmtPct(risk.todayRiskPct)}</div>
-          </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-            <div className="text-xs text-slate-400">Allowed $ risk</div>
-            <div className="text-2xl font-bold text-white mt-1">{fmtMoney(risk.allowedRiskDollars)}</div>
-          </div>
-        </div>
-
-        {/* Date Info */}
-        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-          <div className="text-xs text-slate-400">As of</div>
-          <div className="text-sm font-medium text-white mt-1">
-            {risk.asOfCloseDate ? `Last closed trade: ${risk.asOfCloseDate}` : "No closed trades yet"}
-          </div>
-          <div className="text-xs text-slate-500 mt-1">
-            Today: {risk.todayDate} • Next business day: {risk.tomorrowDate}
-          </div>
-        </div>
-
-        {/* Forecast Grid */}
-        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-          <div className="text-xs text-slate-400 mb-3">Forecast (based on your next trade)</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
-              <div className="text-xs text-emerald-400">If next trade is WIN</div>
-              <div className="text-sm font-bold text-emerald-400 mt-1">
-                {nextWinLabel} ({fmtPct(risk.tomorrowIfWinRiskPct)})
-              </div>
-            </div>
-            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3">
-              <div className="text-xs text-rose-400">If next trade is LOSS</div>
-              <div className="text-sm font-bold text-rose-400 mt-1">
-                {nextLossLabel} ({fmtPct(risk.tomorrowIfLossRiskPct)})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Explanation */}
-        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-          <div className="text-sm font-semibold text-white">{e.title}</div>
-          <div className="text-xs text-slate-400 mt-1">{e.subtitle}</div>
-          <ul className="mt-3 space-y-2 text-sm text-slate-300">
-            {e.bullets.map((b, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-3 text-xs text-slate-500">{e.footer}</div>
-        </div>
-      </div>
-    </div>
+    </Card>
   );
 }

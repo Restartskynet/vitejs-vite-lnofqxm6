@@ -1,34 +1,95 @@
-// src/components/ui/badge.tsx
-import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../../lib/utils";
+import { type ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 
-const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-  {
-    variants: {
-      variant: {
-        default: "border-transparent bg-primary text-primary-foreground",
-        secondary: "border-transparent bg-secondary text-secondary-foreground",
-        destructive: "border-transparent bg-destructive text-destructive-foreground",
-        outline: "text-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
+type BadgeVariant = 'high' | 'low' | 'success' | 'danger' | 'warning' | 'info' | 'neutral';
+type BadgeSize = 'sm' | 'md' | 'lg';
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof badgeVariants> {}
-
-export function Badge({ className, variant, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
+interface BadgeProps {
+  children: ReactNode;
+  variant?: BadgeVariant;
+  size?: BadgeSize;
+  pulse?: boolean;
+  className?: string;
 }
 
-// Keep default export for compatibility
-export default Badge;
+const variantClasses: Record<BadgeVariant, string> = {
+  high: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  low: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  danger: 'bg-red-500/15 text-red-400 border-red-500/30',
+  warning: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  info: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  neutral: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
+};
 
-export { badgeVariants };
+const sizeClasses: Record<BadgeSize, string> = {
+  sm: 'text-[10px] px-2 py-0.5 gap-1',
+  md: 'text-xs px-3 py-1 gap-1.5',
+  lg: 'text-sm px-4 py-1.5 gap-2',
+};
+
+const pulseColors: Record<BadgeVariant, string> = {
+  high: 'bg-emerald-400',
+  low: 'bg-amber-400',
+  success: 'bg-emerald-400',
+  danger: 'bg-red-400',
+  warning: 'bg-amber-400',
+  info: 'bg-blue-400',
+  neutral: 'bg-slate-400',
+};
+
+export function Badge({
+  children,
+  variant = 'neutral',
+  size = 'md',
+  pulse = false,
+  className,
+}: BadgeProps) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full border font-semibold uppercase tracking-wider',
+        variantClasses[variant],
+        sizeClasses[size],
+        className
+      )}
+    >
+      {pulse && (
+        <span
+          className={cn(
+            'h-1.5 w-1.5 rounded-full animate-pulse',
+            pulseColors[variant]
+          )}
+        />
+      )}
+      {children}
+    </span>
+  );
+}
+
+// Convenience exports for common badge types
+export function ModeBadge({ mode, size = 'lg' }: { mode: 'HIGH' | 'LOW'; size?: BadgeSize }) {
+  return (
+    <Badge variant={mode === 'HIGH' ? 'high' : 'low'} size={size} pulse>
+      {mode} Mode
+    </Badge>
+  );
+}
+
+export function StatusBadge({ status }: { status: 'WIN' | 'LOSS' | 'BREAKEVEN' }) {
+  const variant: BadgeVariant = status === 'WIN' ? 'success' : status === 'LOSS' ? 'danger' : 'neutral';
+  return (
+    <Badge variant={variant} size="sm">
+      {status}
+    </Badge>
+  );
+}
+
+export function SymbolBadge({ symbol, status }: { symbol: string; status?: 'WIN' | 'LOSS' }) {
+  const variant: BadgeVariant = status === 'WIN' ? 'success' : status === 'LOSS' ? 'danger' : 'neutral';
+  return (
+    <Badge variant={variant} size="sm">
+      {symbol}
+    </Badge>
+  );
+}
