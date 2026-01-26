@@ -1,7 +1,7 @@
 import { type InputHTMLAttributes, forwardRef, type ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 
-interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
   label?: string;
   helper?: string;
   error?: string;
