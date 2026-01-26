@@ -1,123 +1,222 @@
-import type { RiskMode, RiskState, StrategyConfig, Trade } from "../types/models";
-import { dateKeyMarket, nextBusinessDay } from "../utils/dates";
+import type { Trade, RiskState, StrategyConfig, DailyEquity } from './types';
 
-/**
- * Restart throttle (v1) — per-trade state machine.
- *
- * Rules (as agreed):
- * - Start in HIGH
- * - Win/Loss is per trade: pnl > 0 win, pnl < 0 loss, pnl == 0 ignored
- * - In HIGH: losses drop you to LOW (default: 1 loss; configurable via highLossesNeeded)
- * - In LOW: only wins count; 2 wins returns you to HIGH (configurable via lowWinsNeeded)
- * - Loss in LOW resets low-wins progress to 0
- * - Switch applies immediately to the next trade (no next-day deferral)
- */
-
-export const STRATEGY: StrategyConfig = {
-  lowRiskPct: 0.001, // 0.10%
-  highRiskPct: 0.03, // 3.00%
-  lowWinsNeeded: 2,
-  highLossesNeeded: 1,
+export const DEFAULT_STRATEGY: StrategyConfig = {
+  id: 'restart-throttle',
+  name: 'Restart Throttle',
+  highModeRiskPct: 0.03,    // 3%
+  lowModeRiskPct: 0.001,    // 0.1%
+  winsToRecover: 2,
+  lossesToDrop: 1,
 };
 
-type Outcome = "WIN" | "LOSS" | "BREAKEVEN";
-
-type InternalState = {
-  mode: RiskMode;
-  lowWinsProgress: number;
-  // Only used while in HIGH when highLossesNeeded > 1.
-  highLossesStreak: number;
-};
-
-function outcomeFromPnl(pnl: number): Outcome {
-  if (pnl > 0) return "WIN";
-  if (pnl < 0) return "LOSS";
-  return "BREAKEVEN";
-}
-
-function applyOutcome(state: InternalState, outcome: Outcome, cfg: StrategyConfig): InternalState {
-  if (outcome === "BREAKEVEN") return state;
-
-  if (state.mode === "HIGH") {
-    if (outcome === "WIN") {
-      // wins don't matter in HIGH, but they break a loss streak if using >1 losses.
-      return { ...state, highLossesStreak: 0 };
+/**
+ * Calculate risk states for each day based on trade history
+ */
+export function calculateRiskStates(
+  trades: Trade[],
+  startingEquity: number,
+  strategy: StrategyConfig = DEFAULT_STRATEGY
+): RiskState[] {
+  // Sort trades chronologically
+  const sortedTrades = [...trades]
+    .filter(t => t.status === 'CLOSED')
+    .sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
+  
+  if (sortedTrades.length === 0) {
+    // No trades - return initial HIGH mode state
+    const today = new Date().toISOString().split('T')[0];
+    return [{
+      date: today,
+      mode: 'HIGH',
+      riskPct: strategy.highModeRiskPct,
+      allowedRiskDollars: startingEquity * strategy.highModeRiskPct,
+      equity: startingEquity,
+      lowWinsProgress: 0,
+      lowWinsNeeded: strategy.winsToRecover,
+      lastTradeOutcome: null,
+    }];
+  }
+  
+  const states: RiskState[] = [];
+  let currentMode: 'HIGH' | 'LOW' = 'HIGH';
+  let lowWinsProgress = 0;
+  let equity = startingEquity;
+  
+  // Group trades by market date
+  const tradesByDate = new Map<string, Trade[]>();
+  for (const trade of sortedTrades) {
+    if (!tradesByDate.has(trade.marketDate)) {
+      tradesByDate.set(trade.marketDate, []);
     }
-
-    // LOSS while in HIGH
-    const nextStreak = state.highLossesStreak + 1;
-    if (nextStreak >= cfg.highLossesNeeded) {
-      return { mode: "LOW", lowWinsProgress: 0, highLossesStreak: 0 };
+    tradesByDate.get(trade.marketDate)!.push(trade);
+  }
+  
+  // Process each day
+  const dates = Array.from(tradesByDate.keys()).sort();
+  
+  for (const date of dates) {
+    const dayTrades = tradesByDate.get(date)!;
+    let lastOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | null = null;
+    
+    // Process each trade for that day
+    for (const trade of dayTrades) {
+      equity += trade.realizedPnL;
+      lastOutcome = trade.outcome as 'WIN' | 'LOSS' | 'BREAKEVEN';
+      
+      // Apply strategy rules
+      if (currentMode === 'HIGH') {
+        if (trade.outcome === 'LOSS') {
+          // Drop to LOW mode
+          currentMode = 'LOW';
+          lowWinsProgress = 0;
+        }
+        // Wins and breakeven stay in HIGH
+      } else {
+        // LOW mode
+        if (trade.outcome === 'WIN') {
+          lowWinsProgress++;
+          if (lowWinsProgress >= strategy.winsToRecover) {
+            currentMode = 'HIGH';
+            lowWinsProgress = 0;
+          }
+        } else if (trade.outcome === 'LOSS') {
+          // Reset progress
+          lowWinsProgress = 0;
+        }
+        // Breakeven doesn't affect progress
+      }
     }
-
-    return { ...state, highLossesStreak: nextStreak };
+    
+    const riskPct = currentMode === 'HIGH' ? strategy.highModeRiskPct : strategy.lowModeRiskPct;
+    
+    states.push({
+      date,
+      mode: currentMode,
+      riskPct,
+      allowedRiskDollars: equity * riskPct,
+      equity,
+      lowWinsProgress,
+      lowWinsNeeded: strategy.winsToRecover,
+      lastTradeOutcome: lastOutcome,
+    });
   }
-
-  // LOW mode
-  if (outcome === "LOSS") {
-    // loss in LOW resets progress
-    return { ...state, lowWinsProgress: 0, highLossesStreak: 0 };
-  }
-
-  // WIN while in LOW
-  const nextProgress = state.lowWinsProgress + 1;
-  if (nextProgress >= cfg.lowWinsNeeded) {
-    return { mode: "HIGH", lowWinsProgress: 0, highLossesStreak: 0 };
-  }
-
-  return { ...state, lowWinsProgress: nextProgress, highLossesStreak: 0 };
-}
-
-function pctForMode(mode: RiskMode, cfg: StrategyConfig): number {
-  return mode === "HIGH" ? cfg.highRiskPct : cfg.lowRiskPct;
+  
+  return states;
 }
 
 /**
- * Computes the throttle state "as-of" the most recent completed trade.
- *
- * Notes:
- * - Trades are processed in chronological EXIT order.
- * - The resulting mode is the mode to use for the *next* trade.
+ * Get current risk state (as of today or last trade date)
  */
-export function computeRiskState(trades: Trade[], startingEquity: number, cfg: StrategyConfig): RiskState {
-  const startEq = Number.isFinite(startingEquity) ? startingEquity : 0;
-
-  const sorted = [...trades].sort((a, b) => a.exitTs.getTime() - b.exitTs.getTime());
-
-  let state: InternalState = { mode: "HIGH", lowWinsProgress: 0, highLossesStreak: 0 };
-  let equityAsOfClose = startEq;
-  let asOfCloseDate: string | null = null;
-
-  for (const t of sorted) {
-    equityAsOfClose += t.pnl;
-    asOfCloseDate = t.exitDate;
-    state = applyOutcome(state, outcomeFromPnl(t.pnl), cfg);
-  }
-
-  // UI dates: treat "today" as the current market date.
-  const todayDate = dateKeyMarket(new Date());
-  const tomorrowDate = nextBusinessDay(todayDate);
-
-  const todayRiskPct = pctForMode(state.mode, cfg);
-  const allowedRiskDollars = equityAsOfClose * todayRiskPct;
-
-  const winNext = applyOutcome(state, "WIN", cfg);
-  const lossNext = applyOutcome(state, "LOSS", cfg);
-
-  return {
-    mode: state.mode,
-    lowWinsProgress: state.lowWinsProgress,
-
-    asOfCloseDate,
-    todayDate,
-    tomorrowDate,
-
-    todayRiskPct,
-    tomorrowBaseRiskPct: todayRiskPct,
-    tomorrowIfWinRiskPct: pctForMode(winNext.mode, cfg),
-    tomorrowIfLossRiskPct: pctForMode(lossNext.mode, cfg),
-
-    equityAsOfClose,
-    allowedRiskDollars,
+export function getCurrentRisk(
+  trades: Trade[],
+  startingEquity: number,
+  strategy: StrategyConfig = DEFAULT_STRATEGY
+): RiskState & { forecast: { ifWin: { mode: 'HIGH' | 'LOW'; riskPct: number }; ifLoss: { mode: 'HIGH' | 'LOW'; riskPct: number } } } {
+  const states = calculateRiskStates(trades, startingEquity, strategy);
+  const lastState = states[states.length - 1] || {
+    date: new Date().toISOString().split('T')[0],
+    mode: 'HIGH' as const,
+    riskPct: strategy.highModeRiskPct,
+    allowedRiskDollars: startingEquity * strategy.highModeRiskPct,
+    equity: startingEquity,
+    lowWinsProgress: 0,
+    lowWinsNeeded: strategy.winsToRecover,
+    lastTradeOutcome: null,
   };
+  
+  // Calculate forecast scenarios
+  let ifWinMode: 'HIGH' | 'LOW';
+  let ifLossMode: 'HIGH' | 'LOW';
+  
+  if (lastState.mode === 'HIGH') {
+    ifWinMode = 'HIGH'; // Stays HIGH
+    ifLossMode = 'LOW'; // Drops to LOW
+  } else {
+    // LOW mode
+    const winsAfterWin = lastState.lowWinsProgress + 1;
+    ifWinMode = winsAfterWin >= strategy.winsToRecover ? 'HIGH' : 'LOW';
+    ifLossMode = 'LOW'; // Reset, stay LOW
+  }
+  
+  return {
+    ...lastState,
+    forecast: {
+      ifWin: {
+        mode: ifWinMode,
+        riskPct: ifWinMode === 'HIGH' ? strategy.highModeRiskPct : strategy.lowModeRiskPct,
+      },
+      ifLoss: {
+        mode: ifLossMode,
+        riskPct: ifLossMode === 'HIGH' ? strategy.highModeRiskPct : strategy.lowModeRiskPct,
+      },
+    },
+  };
+}
+
+/**
+ * Calculate daily equity curve
+ */
+export function calculateDailyEquity(
+  trades: Trade[],
+  startingEquity: number
+): DailyEquity[] {
+  const sortedTrades = [...trades]
+    .filter(t => t.status === 'CLOSED')
+    .sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
+  
+  if (sortedTrades.length === 0) {
+    return [];
+  }
+  
+  // Group by date
+  const tradesByDate = new Map<string, Trade[]>();
+  for (const trade of sortedTrades) {
+    if (!tradesByDate.has(trade.marketDate)) {
+      tradesByDate.set(trade.marketDate, []);
+    }
+    tradesByDate.get(trade.marketDate)!.push(trade);
+  }
+  
+  const equityCurve: DailyEquity[] = [];
+  let cumulativeEquity = startingEquity;
+  let peakEquity = startingEquity;
+  let cumulativePnL = 0;
+  
+  const dates = Array.from(tradesByDate.keys()).sort();
+  
+  for (const date of dates) {
+    const dayTrades = tradesByDate.get(date)!;
+    const dayPnL = dayTrades.reduce((sum, t) => sum + t.realizedPnL, 0);
+    const wins = dayTrades.filter(t => t.outcome === 'WIN').length;
+    const losses = dayTrades.filter(t => t.outcome === 'LOSS').length;
+    
+    cumulativeEquity += dayPnL;
+    cumulativePnL += dayPnL;
+    peakEquity = Math.max(peakEquity, cumulativeEquity);
+    
+    const drawdownPct = peakEquity > 0 ? (cumulativeEquity - peakEquity) / peakEquity : 0;
+    
+    equityCurve.push({
+      date,
+      tradingEquity: cumulativeEquity,
+      accountEquity: cumulativeEquity, // Same for now, adjustments come in Step 3
+      dayPnL,
+      cumulativePnL,
+      drawdownPct,
+      peakEquity,
+      tradeCount: dayTrades.length,
+      winCount: wins,
+      lossCount: losses,
+    });
+  }
+  
+  return equityCurve;
+}
+
+/**
+ * Calculate max drawdown from equity curve
+ */
+export function calculateMaxDrawdown(equityCurve: DailyEquity[]): number {
+  if (equityCurve.length === 0) return 0;
+  return Math.min(...equityCurve.map(d => d.drawdownPct));
 }

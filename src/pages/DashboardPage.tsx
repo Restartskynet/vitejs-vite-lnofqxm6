@@ -1,22 +1,35 @@
 import { useDashboardState } from '../stores/dashboardStore';
 import { TopSummaryStrip, Section } from '../components/layout';
 import { HeroRiskPanel, PositionSizer, StrategyExplainer } from '../components/dashboard';
+import { TradesTable } from '../components/trades';
 import { Button } from '../components/ui';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
-  const { hasData } = useDashboardState();
+  const { hasData, trades } = useDashboardState();
+
+  // Get most recent 5 trades for preview
+  const recentTrades = trades.slice(0, 5);
 
   return (
     <div className="space-y-6">
+      {/* Hero Row: Risk Panel + Position Sizer */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2"><HeroRiskPanel /></div>
-        <div><PositionSizer /></div>
+        <div className="lg:col-span-2">
+          <HeroRiskPanel />
+        </div>
+        <div>
+          <PositionSizer />
+        </div>
       </div>
 
+      {/* KPI Strip */}
       <TopSummaryStrip />
+
+      {/* Strategy Explainer */}
       <StrategyExplainer collapsed={hasData} />
 
+      {/* Quick Actions for empty state */}
       {!hasData && (
         <Section title="Get Started">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -52,11 +65,19 @@ export function DashboardPage() {
         </Section>
       )}
 
-      {hasData && (
-        <Section title="Recent Trades" action={<Link to="/trades"><Button variant="ghost" size="sm">View All →</Button></Link>}>
-          <div className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-center">
-            <p className="text-slate-500">Trade history will appear here</p>
-          </div>
+      {/* Recent Trades Preview (when has data) */}
+      {hasData && recentTrades.length > 0 && (
+        <Section
+          title="Recent Trades"
+          action={
+            <Link to="/trades">
+              <Button variant="ghost" size="sm">
+                View All ({trades.length}) →
+              </Button>
+            </Link>
+          }
+        >
+          <TradesTable trades={recentTrades} />
         </Section>
       )}
     </div>

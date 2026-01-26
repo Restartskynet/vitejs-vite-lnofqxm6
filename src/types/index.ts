@@ -176,4 +176,6 @@ export const EMPTY_CURRENT_RISK: CurrentRisk = {
     ifWin: { mode: 'HIGH', riskPct: 0.03 },
     ifLoss: { mode: 'LOW', riskPct: 0.001 },
   },
+// Re-export engine types for convenience
+export type { Fill, Trade, DailyEquity, ImportResult, ValidationError, ValidationWarning, CSVPreview } from '../engine/types';
 };

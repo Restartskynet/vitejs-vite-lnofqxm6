@@ -1,10 +1,11 @@
 import { useDashboardState } from '../stores/dashboardStore';
 import { Page } from '../components/layout';
 import { Card, Button } from '../components/ui';
+import { TradesTable } from '../components/trades';
 import { Link } from 'react-router-dom';
 
 export function TradesPage() {
-  const { hasData, trades } = useDashboardState();
+  const { hasData, trades, metrics } = useDashboardState();
 
   if (!hasData) {
     return (
@@ -17,8 +18,17 @@ export function TradesPage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">No trades yet</h3>
-            <p className="text-sm text-slate-400 mb-6 max-w-sm mx-auto">Import your Webull CSV to see a detailed breakdown of every trade with P&L tracking.</p>
-            <Link to="/upload"><Button>Import Trades</Button></Link>
+            <p className="text-sm text-slate-400 mb-6 max-w-sm mx-auto">
+              Import your Webull CSV to see a detailed breakdown of every trade with P&L tracking.
+            </p>
+            <Link to="/upload">
+              <Button>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                Import Trades
+              </Button>
+            </Link>
           </div>
         </Card>
       </Page>
@@ -26,12 +36,11 @@ export function TradesPage() {
   }
 
   return (
-    <Page title="Trade History" subtitle={`${trades.length} trades`} action={<Button variant="secondary" size="sm">Export</Button>}>
-      <Card>
-        <div className="text-center py-12">
-          <p className="text-slate-500">Full trades table with search, sort, and expandable rows coming in Step 2</p>
-        </div>
-      </Card>
+    <Page 
+      title="Trade History" 
+      subtitle={`${trades.length} trades • ${metrics.wins}W / ${metrics.losses}L`}
+    >
+      <TradesTable trades={trades} />
     </Page>
   );
 }
