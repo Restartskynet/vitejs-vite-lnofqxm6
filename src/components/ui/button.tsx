@@ -1,4 +1,4 @@
-import { type ReactNode, type ButtonHTMLAttributes, forwardRef } from 'react';
+import { type ReactNode, type ButtonHTMLAttributes, forwardRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -14,14 +14,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    'bg-blue-600 hover:bg-blue-500 text-white border-blue-500/50 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30',
-  secondary:
-    'bg-white/[0.06] hover:bg-white/[0.1] text-white border-white/10 hover:border-white/20',
-  ghost:
-    'bg-transparent hover:bg-white/[0.06] text-slate-400 hover:text-white border-transparent',
-  danger:
-    'bg-red-600/80 hover:bg-red-500 text-white border-red-500/50 shadow-lg shadow-red-500/20',
+  primary: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500/50 shadow-lg shadow-blue-500/20',
+  secondary: 'bg-white/[0.06] hover:bg-white/[0.1] text-white border-white/10 hover:border-white/20',
+  ghost: 'bg-transparent hover:bg-white/[0.06] text-slate-400 hover:text-white border-transparent',
+  danger: 'bg-red-600/80 hover:bg-red-500 text-white border-red-500/50 shadow-lg shadow-red-500/20',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -31,20 +27,8 @@ const sizeClasses: Record<ButtonSize, string> = {
 };
 
 const Spinner = () => (
-  <svg
-    className="h-4 w-4 animate-spin"
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-  >
-    <circle
-      className="opacity-25"
-      cx="12"
-      cy="12"
-      r="10"
-      stroke="currentColor"
-      strokeWidth="4"
-    />
+  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
     <path
       className="opacity-75"
       fill="currentColor"
@@ -54,21 +38,7 @@ const Spinner = () => (
 );
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      children,
-      variant = 'primary',
-      size = 'md',
-      icon,
-      iconRight,
-      loading = false,
-      fullWidth = false,
-      disabled,
-      className,
-      ...props
-    },
-    ref
-  ) => {
+  ({ children, variant = 'primary', size = 'md', icon, iconRight, loading = false, fullWidth = false, disabled, className, ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -93,39 +63,3 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = 'Button';
-
-// Icon button variant for compact icons
-interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  children: ReactNode;
-}
-
-export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ variant = 'ghost', size = 'md', className, children, ...props }, ref) => {
-    const sizeMap: Record<ButtonSize, string> = {
-      sm: 'p-1.5 rounded-lg',
-      md: 'p-2 rounded-xl',
-      lg: 'p-3 rounded-xl',
-    };
-
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          'inline-flex items-center justify-center border transition-all duration-150',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500/40',
-          'active:scale-[0.95] disabled:opacity-50 disabled:cursor-not-allowed',
-          variantClasses[variant],
-          sizeMap[size],
-          className
-        )}
-        {...props}
-      >
-        {children}
-      </button>
-    );
-  }
-);
-
-IconButton.displayName = 'IconButton';

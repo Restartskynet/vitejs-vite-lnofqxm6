@@ -38,13 +38,7 @@ const pulseColors: Record<BadgeVariant, string> = {
   neutral: 'bg-slate-400',
 };
 
-export function Badge({
-  children,
-  variant = 'neutral',
-  size = 'md',
-  pulse = false,
-  className,
-}: BadgeProps) {
+export function Badge({ children, variant = 'neutral', size = 'md', pulse = false, className }: BadgeProps) {
   return (
     <span
       className={cn(
@@ -54,42 +48,16 @@ export function Badge({
         className
       )}
     >
-      {pulse && (
-        <span
-          className={cn(
-            'h-1.5 w-1.5 rounded-full animate-pulse',
-            pulseColors[variant]
-          )}
-        />
-      )}
+      {pulse && <span className={cn('h-1.5 w-1.5 rounded-full animate-pulse', pulseColors[variant])} />}
       {children}
     </span>
   );
 }
 
-// Convenience exports for common badge types
 export function ModeBadge({ mode, size = 'lg' }: { mode: 'HIGH' | 'LOW'; size?: BadgeSize }) {
   return (
     <Badge variant={mode === 'HIGH' ? 'high' : 'low'} size={size} pulse>
       {mode} Mode
-    </Badge>
-  );
-}
-
-export function StatusBadge({ status }: { status: 'WIN' | 'LOSS' | 'BREAKEVEN' }) {
-  const variant: BadgeVariant = status === 'WIN' ? 'success' : status === 'LOSS' ? 'danger' : 'neutral';
-  return (
-    <Badge variant={variant} size="sm">
-      {status}
-    </Badge>
-  );
-}
-
-export function SymbolBadge({ symbol, status }: { symbol: string; status?: 'WIN' | 'LOSS' }) {
-  const variant: BadgeVariant = status === 'WIN' ? 'success' : status === 'LOSS' ? 'danger' : 'neutral';
-  return (
-    <Badge variant={variant} size="sm">
-      {symbol}
     </Badge>
   );
 }
