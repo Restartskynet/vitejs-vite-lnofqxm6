@@ -158,3 +158,75 @@ export interface CSVPreview {
   hasRequiredColumns: boolean;
   missingColumns: string[];
 }
+/**
+ * Skipped row info for import feedback
+ */
+export interface SkippedRow {
+  rowIndex: number;
+  reasons: string[];
+  rawData: Record<string, string>;
+}
+
+/**
+ * Detected CSV format
+ */
+export type WebullCSVFormat = 'orders-records' | 'orders-fills' | 'unknown';
+
+/**
+ * Extended CSV preview with format detection
+ */
+export interface CSVPreviewExtended extends CSVPreview {
+  detectedFormat: WebullCSVFormat;
+  formatConfidence: 'high' | 'medium' | 'low';
+  allRows: string[][];
+}
+
+/**
+ * Extended import result with skipped rows detail
+ */
+export interface ImportResultExtended extends ImportResult {
+  detectedFormat: WebullCSVFormat;
+  skippedRows: SkippedRow[];
+  pendingOrders: PendingOrder[];
+}
+
+/**
+ * Pending order for stop/target inference
+ */
+export interface PendingOrder {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  price: number;
+  quantity: number;
+  placedTime: Date;
+  type: 'STOP' | 'LIMIT' | 'MARKET' | 'UNKNOWN';
+}
+
+/**
+ * Risk state at a specific point for audit trail
+ */
+export interface RiskStateSnapshot {
+  tradeId: string;
+  tradeOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | 'OPEN';
+  tradePnL: number;
+  modeBefore: 'HIGH' | 'LOW';
+  modeAfter: 'HIGH' | 'LOW';
+  lowWinsProgressBefore: number;
+  lowWinsProgressAfter: number;
+  equityBefore: number;
+  equityAfter: number;
+  riskPctApplied: number;
+  timestamp: Date;
+}
+
+/**
+ * Extended Trade with risk annotation
+ */
+export interface TradeWithRisk extends Trade {
+  riskPctAtEntry: number;
+  equityAtEntry: number;
+  riskDollarsAtEntry: number;
+  inferredStop: number | null;
+  pendingExit: number | null;
+  stopSource: 'user' | 'inferred' | 'none';
+}
