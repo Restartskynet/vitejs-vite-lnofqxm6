@@ -13,10 +13,21 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const [useAccountEquity, setUseAccountEquity] = useState(true);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const chartData = useMemo(() => {
-    if (data.length === 0) return null;
+  // Defensive: ensure data is a valid array
+  const safeData = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    return data.filter(d => d && typeof d.tradingEquity === 'number');
+  }, [data]);
 
-    const values = data.map(d => useAccountEquity ? (d.accountEquity ?? d.tradingEquity) : d.tradingEquity);
+  const chartData = useMemo(() => {
+    // Guard against empty or invalid data
+    if (!safeData || safeData.length === 0) return null;
+
+    const values = safeData.map(d => useAccountEquity ? (d.accountEquity ?? d.tradingEquity) : d.tradingEquity);
+    
+    // Guard against empty values array
+    if (values.length === 0) return null;
+    
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
     const range = maxVal - minVal || 1;
@@ -25,13 +36,14 @@ export function EquityChart({ data, className }: EquityChartProps) {
     let peak = values[0];
     const drawdowns = values.map(v => {
       if (v > peak) peak = v;
-      return ((peak - v) / peak) * 100;
+      return peak > 0 ? ((peak - v) / peak) * 100 : 0;
     });
 
     return { values, minVal, maxVal, range, drawdowns };
-  }, [data, useAccountEquity]);
+  }, [safeData, useAccountEquity]);
 
-  if (!chartData || data.length === 0) {
+  // Empty state - show when no data or invalid data
+  if (!chartData || safeData.length === 0) {
     return (
       <Card className={className}>
         <div className="text-center py-12 text-slate-500">
@@ -53,8 +65,10 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const displayMax = showDrawdown ? Math.max(...chartData.drawdowns, 1) : chartData.maxVal;
   const displayRange = displayMax - displayMin || 1;
 
+  // Guard against single-point series causing division by zero
+  const pointCount = displayValues.length;
   const points = displayValues.map((v, i) => {
-    const x = padding + (i / (displayValues.length - 1)) * (width - 2 * padding);
+    const x = padding + (pointCount > 1 ? (i / (pointCount - 1)) : 0.5) * (width - 2 * padding);
     const y = height - padding - ((v - displayMin) / displayRange) * (height - 2 * padding);
     return `${x},${y}`;
   }).join(' ');
@@ -64,7 +78,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const startValue = chartData.values[0];
   const endValue = chartData.values[chartData.values.length - 1];
   const change = endValue - startValue;
-  const changePct = (change / startValue) * 100;
+  const changePct = startValue !== 0 ? (change / startValue) * 100 : 0;
   const isPositive = change >= 0;
 
   return (
@@ -72,7 +86,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-white">Equity Curve</h3>
-          <p className="text-xs text-slate-500">{data.length} days</p>
+          <p className="text-xs text-slate-500">{safeData.length} days</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -130,8 +144,8 @@ export function EquityChart({ data, className }: EquityChartProps) {
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const x = (e.clientX - rect.left) / rect.width;
-            const idx = Math.round(x * (data.length - 1));
-            setHoveredIndex(Math.max(0, Math.min(idx, data.length - 1)));
+            const idx = Math.round(x * (safeData.length - 1));
+            setHoveredIndex(Math.max(0, Math.min(idx, safeData.length - 1)));
           }}
         >
           <defs>
@@ -150,19 +164,19 @@ export function EquityChart({ data, className }: EquityChartProps) {
           />
 
           {/* Hover line */}
-          {hoveredIndex !== null && (
+          {hoveredIndex !== null && pointCount > 1 && (
             <>
               <line
-                x1={padding + (hoveredIndex / (displayValues.length - 1)) * (width - 2 * padding)}
+                x1={padding + (hoveredIndex / (pointCount - 1)) * (width - 2 * padding)}
                 y1={padding}
-                x2={padding + (hoveredIndex / (displayValues.length - 1)) * (width - 2 * padding)}
+                x2={padding + (hoveredIndex / (pointCount - 1)) * (width - 2 * padding)}
                 y2={height - padding}
                 stroke="white"
                 strokeWidth="0.3"
                 strokeDasharray="1,1"
               />
               <circle
-                cx={padding + (hoveredIndex / (displayValues.length - 1)) * (width - 2 * padding)}
+                cx={padding + (hoveredIndex / (pointCount - 1)) * (width - 2 * padding)}
                 cy={height - padding - ((displayValues[hoveredIndex] - displayMin) / displayRange) * (height - 2 * padding)}
                 r="1"
                 fill="white"
@@ -172,21 +186,21 @@ export function EquityChart({ data, className }: EquityChartProps) {
         </svg>
 
         {/* Tooltip */}
-        {hoveredIndex !== null && data[hoveredIndex] && (
+        {hoveredIndex !== null && safeData[hoveredIndex] && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 rounded-lg bg-slate-800 border border-white/10 text-xs z-10">
-            <p className="text-slate-400">{data[hoveredIndex].date}</p>
+            <p className="text-slate-400">{safeData[hoveredIndex].date}</p>
             <p className="text-white font-medium">
               {showDrawdown 
                 ? `-${chartData.drawdowns[hoveredIndex].toFixed(2)}%`
                 : formatMoney(chartData.values[hoveredIndex])
               }
             </p>
-            {data[hoveredIndex].dayPnL !== undefined && (
+            {safeData[hoveredIndex].dayPnL !== undefined && (
               <p className={cn(
                 'text-xs',
-                data[hoveredIndex].dayPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
+                safeData[hoveredIndex].dayPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
               )}>
-                Day: {data[hoveredIndex].dayPnL >= 0 ? '+' : ''}{formatMoney(data[hoveredIndex].dayPnL)}
+                Day: {safeData[hoveredIndex].dayPnL >= 0 ? '+' : ''}{formatMoney(safeData[hoveredIndex].dayPnL)}
               </p>
             )}
           </div>

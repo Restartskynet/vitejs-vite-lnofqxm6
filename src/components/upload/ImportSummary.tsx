@@ -16,7 +16,16 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
   
   const hasErrors = result.errors.length > 0;
   const hasWarnings = result.warnings.length > 0;
-  const hasSkipped = result.skippedRows.length > 0;
+  
+  // FIX: Safe fallback for skippedRows (may not exist in base ImportResult)
+  const skippedRows = result.skippedRows ?? [];
+  const hasSkipped = skippedRows.length > 0;
+  
+  // FIX: Safe fallback for pendingOrders
+  const pendingOrders = result.pendingOrders ?? [];
+  
+  // FIX: Safe fallback for detectedFormat
+  const detectedFormat = result.detectedFormat ?? 'unknown';
   
   return (
     <Card className={className}>
@@ -27,11 +36,11 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
         </div>
         <div className="flex items-center gap-2">
           <Badge 
-            variant={result.detectedFormat === 'orders-records' ? 'info' : 
-                     result.detectedFormat === 'orders-fills' ? 'success' : 'warning'}
+            variant={detectedFormat === 'orders-records' ? 'info' : 
+                     detectedFormat === 'orders-fills' ? 'success' : 'warning'}
             size="sm"
           >
-            {result.detectedFormat}
+            {detectedFormat}
           </Badge>
           <Badge 
             variant={result.success ? 'success' : 'danger'} 
@@ -58,7 +67,7 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
         </div>
         <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
           <p className="text-[10px] text-blue-400/80 uppercase tracking-wider">Pending Orders</p>
-          <p className="text-xl font-bold text-blue-400">{result.pendingOrders.length}</p>
+          <p className="text-xl font-bold text-blue-400">{pendingOrders.length}</p>
         </div>
         <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider">Symbols</p>
@@ -99,42 +108,28 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
             className="flex items-center gap-2 text-sm text-amber-400 hover:text-amber-300 transition-colors"
           >
             <svg 
-              className={`w-4 h-4 transition-transform ${showSkipped ? 'rotate-90' : ''}`} 
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+              className={`w-4 h-4 transition-transform ${showSkipped ? 'rotate-90' : ''}`}
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor" 
+              strokeWidth={2}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-            View {result.skippedRows.length} Skipped Row(s)
+            View {skippedRows.length} skipped rows
           </button>
           
           {showSkipped && (
-            <div className="mt-3 max-h-64 overflow-y-auto border border-amber-500/20 rounded-lg">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-slate-900">
-                  <tr className="border-b border-white/10">
-                    <th className="px-3 py-2 text-left text-amber-400/80">Row</th>
-                    <th className="px-3 py-2 text-left text-amber-400/80">Reason(s)</th>
-                    <th className="px-3 py-2 text-left text-amber-400/80">Data</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.skippedRows.map((skip, idx) => (
-                    <tr key={idx} className="border-b border-white/5 hover:bg-white/[0.02]">
-                      <td className="px-3 py-2 text-slate-400">{skip.rowIndex}</td>
-                      <td className="px-3 py-2">
-                        <ul className="list-disc list-inside text-amber-400/80">
-                          {skip.reasons.map((reason, rIdx) => (
-                            <li key={rIdx}>{reason}</li>
-                          ))}
-                        </ul>
-                      </td>
-                      <td className="px-3 py-2 text-slate-500 max-w-[200px] truncate">
-                        {Object.entries(skip.rawData).slice(0, 3).map(([k, v]) => `${k}:${v}`).join(', ')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-3 max-h-48 overflow-y-auto space-y-2">
+              {skippedRows.slice(0, 20).map((row, i) => (
+                <div key={i} className="p-2 rounded bg-amber-500/10 text-xs">
+                  <span className="text-amber-400">Row {row.rowIndex ?? i + 1}:</span>
+                  <span className="text-slate-400 ml-2">{row.reasons?.join(', ') || 'Unknown reason'}</span>
+                </div>
+              ))}
+              {skippedRows.length > 20 && (
+                <p className="text-xs text-slate-500">...and {skippedRows.length - 20} more</p>
+              )}
             </div>
           )}
         </div>
@@ -146,14 +141,15 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
           <p className="text-xs text-red-400 uppercase tracking-wider mb-2">
             Errors ({result.errors.length})
           </p>
-          <div className="max-h-40 overflow-y-auto space-y-1">
-            {result.errors.slice(0, 10).map((err, i) => (
+          <div className="max-h-32 overflow-y-auto space-y-1">
+            {result.errors.slice(0, 5).map((err, i) => (
               <div key={i} className="p-2 rounded bg-red-500/10 text-xs text-red-400">
-                Row {err.row}: {err.message} {err.value && `("${err.value}")`}
+                {err.row > 0 && `Row ${err.row}: `}{err.message}
+                {err.column && <span className="text-red-400/60 ml-1">({err.column})</span>}
               </div>
             ))}
-            {result.errors.length > 10 && (
-              <p className="text-xs text-red-400/60">...and {result.errors.length - 10} more errors</p>
+            {result.errors.length > 5 && (
+              <p className="text-xs text-red-400/60">...and {result.errors.length - 5} more errors</p>
             )}
           </div>
         </div>

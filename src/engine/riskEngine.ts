@@ -9,6 +9,14 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
   lossesToDrop: 1,
 };
 
+// Re-export for backwards compatibility with tests
+export const STRATEGY = DEFAULT_STRATEGY;
+
+/**
+ * Mode type for explicit annotation
+ */
+type RiskMode = 'HIGH' | 'LOW';
+
 /**
  * Ensure input is a valid Trade array - defensive helper
  */
@@ -60,7 +68,8 @@ export function calculateRiskStates(
   }
   
   const states: RiskState[] = [];
-  let currentMode: 'HIGH' | 'LOW' = 'HIGH';
+  // FIX: Explicitly type as RiskMode to prevent over-narrowing
+  let currentMode: RiskMode = 'HIGH';
   let lowWinsProgress = 0;
   let equity = startingEquity;
   
@@ -89,7 +98,10 @@ export function calculateRiskStates(
       }
       
       // Apply strategy rules
-      if (currentMode === 'HIGH') {
+      // FIX: Use explicit comparison to prevent type narrowing issues
+      const isHighMode = currentMode === 'HIGH';
+      
+      if (isHighMode) {
         if (trade.outcome === 'LOSS') {
           // Drop to LOW mode
           currentMode = 'LOW';
@@ -130,20 +142,30 @@ export function calculateRiskStates(
 }
 
 /**
+ * Return type for getCurrentRisk with forecast
+ */
+export interface CurrentRiskResult extends RiskState {
+  forecast: {
+    ifWin: { mode: RiskMode; riskPct: number };
+    ifLoss: { mode: RiskMode; riskPct: number };
+  };
+}
+
+/**
  * Get current risk state (as of today or last trade date)
  */
 export function getCurrentRisk(
   trades: Trade[],
   startingEquity: number,
   strategy: StrategyConfig = DEFAULT_STRATEGY
-): RiskState & { forecast: { ifWin: { mode: 'HIGH' | 'LOW'; riskPct: number }; ifLoss: { mode: 'HIGH' | 'LOW'; riskPct: number } } } {
+): CurrentRiskResult {
   // Defensive: ensure trades is an array
   const tradesArray = ensureTradesArray(trades);
   
   const states = calculateRiskStates(tradesArray, startingEquity, strategy);
   const lastState = states[states.length - 1] || {
     date: new Date().toISOString().split('T')[0],
-    mode: 'HIGH' as const,
+    mode: 'HIGH' as RiskMode,
     riskPct: strategy.highModeRiskPct,
     allowedRiskDollars: startingEquity * strategy.highModeRiskPct,
     equity: startingEquity,
@@ -153,10 +175,14 @@ export function getCurrentRisk(
   };
   
   // Calculate forecast scenarios
-  let ifWinMode: 'HIGH' | 'LOW';
-  let ifLossMode: 'HIGH' | 'LOW';
+  // FIX: Explicitly type these variables to prevent literal narrowing
+  let ifWinMode: RiskMode;
+  let ifLossMode: RiskMode;
   
-  if (lastState.mode === 'HIGH') {
+  // FIX: Store mode in local const to avoid narrowing issues
+  const currentMode: RiskMode = lastState.mode;
+  
+  if (currentMode === 'HIGH') {
     ifWinMode = 'HIGH'; // Stays HIGH
     ifLossMode = 'LOW'; // Drops to LOW
   } else {
@@ -178,6 +204,30 @@ export function getCurrentRisk(
         riskPct: ifLossMode === 'HIGH' ? strategy.highModeRiskPct : strategy.lowModeRiskPct,
       },
     },
+  };
+}
+
+/**
+ * Compute risk state - alias for getCurrentRisk for backwards compatibility with tests
+ */
+export function computeRiskState(
+  trades: Trade[],
+  startingEquity: number,
+  strategy: StrategyConfig = DEFAULT_STRATEGY
+): {
+  mode: RiskMode;
+  lowWinsProgress: number;
+  todayRiskPct: number;
+  tomorrowIfWinRiskPct: number;
+  tomorrowIfLossRiskPct: number;
+} {
+  const result = getCurrentRisk(trades, startingEquity, strategy);
+  return {
+    mode: result.mode,
+    lowWinsProgress: result.lowWinsProgress,
+    todayRiskPct: result.riskPct,
+    tomorrowIfWinRiskPct: result.forecast.ifWin.riskPct,
+    tomorrowIfLossRiskPct: result.forecast.ifLoss.riskPct,
   };
 }
 

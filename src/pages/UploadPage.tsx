@@ -5,7 +5,8 @@ import { Page, Section } from '../components/layout';
 import { Card, Button, Badge } from '../components/ui';
 import { UploadZone, CSVPreview, ImportSummary, ImportHistory } from '../components/upload';
 import { previewCSV, parseWebullCSV } from '../engine/webullParser';
-import type { CSVPreview as CSVPreviewData, ImportResult } from '../engine/types';
+// FIX: Import extended types instead of base types
+import type { CSVPreviewExtended, ImportResultExtended } from '../engine/types';
 
 type UploadStep = 'upload' | 'preview' | 'confirm';
 type ImportMode = 'merge' | 'replace';
@@ -16,8 +17,10 @@ export function UploadPage() {
   const [step, setStep] = useState<UploadStep>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
-  const [preview, setPreview] = useState<CSVPreviewData | null>(null);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // FIX: Use CSVPreviewExtended type
+  const [preview, setPreview] = useState<CSVPreviewExtended | null>(null);
+  // FIX: Use ImportResultExtended type
+  const [importResult, setImportResult] = useState<ImportResultExtended | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>('merge');
 
@@ -25,7 +28,7 @@ export function UploadPage() {
     setFile(selectedFile);
     setFileContent(content);
     
-    // Generate preview
+    // Generate preview - previewCSV returns CSVPreviewExtended
     const previewData = previewCSV(content);
     setPreview(previewData);
     setStep('preview');
@@ -41,7 +44,7 @@ export function UploadPage() {
     
     setIsProcessing(true);
     
-    // Parse the CSV
+    // Parse the CSV - parseWebullCSV returns ImportResultExtended
     setTimeout(() => {
       const result = parseWebullCSV(fileContent);
       setImportResult(result);
@@ -107,7 +110,7 @@ export function UploadPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 ) : (
-                  <span className="w-5 h-5 flex items-center justify-center rounded-full bg-current/20 text-xs">
+                  <span className="w-5 h-5 rounded-full border border-current flex items-center justify-center text-xs">
                     {i + 1}
                   </span>
                 )}
@@ -118,93 +121,57 @@ export function UploadPage() {
         })}
       </div>
 
+      {/* Import History */}
+      {state.importHistory.length > 0 && step === 'upload' && (
+        <Section className="mb-6">
+          <ImportHistory history={state.importHistory} />
+        </Section>
+      )}
+
       {/* Step 1: Upload */}
       {step === 'upload' && (
-        <>
-          <Section>
-            <UploadZone onFileSelect={handleFileSelect} />
-            
-            {/* Import Mode Selector */}
-            {state.hasData && (
-              <Card className="mt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-medium text-white">Import Mode</h3>
-                    <p className="text-xs text-slate-500 mt-1">
-                      You have {state.fills.length} existing fills
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setImportMode('merge')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        importMode === 'merge'
-                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                          : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
-                      }`}
-                    >
-                      Merge
-                    </button>
-                    <button
-                      onClick={() => setImportMode('replace')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        importMode === 'replace'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                          : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
-                      }`}
-                    >
-                      Replace
-                    </button>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 mt-3">
-                  {importMode === 'merge' 
-                    ? '• Merge: Add new fills, skip duplicates (recommended)' 
-                    : '• Replace: Clear existing data and use only new file'}
-                </p>
-              </Card>
-            )}
-            
-            {/* Instructions */}
-            <Card className="mt-6">
-              <h3 className="text-lg font-semibold text-white mb-4">How to Export from Webull</h3>
-              <div className="space-y-4 text-sm text-slate-400">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-400 text-xs font-bold">1</div>
-                  <p>Open the Webull app or website and go to your account</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-400 text-xs font-bold">2</div>
-                  <p>Navigate to <strong className="text-white">Orders</strong> → <strong className="text-white">Order History</strong></p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-400 text-xs font-bold">3</div>
-                  <p>Click the <strong className="text-white">Export</strong> button and select CSV format</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-400 text-xs font-bold">4</div>
-                  <p>Upload the downloaded file here</p>
-                </div>
-              </div>
-            </Card>
-          </Section>
-
-          {/* Import History */}
-          {state.importHistory.length > 0 && (
-            <Section className="mt-8">
-              <ImportHistory 
-                history={state.importHistory} 
-                onClearHistory={actions.clearImportHistory}
-                compact
-              />
-            </Section>
-          )}
-        </>
+        <Section>
+          <UploadZone onFileSelect={handleFileSelect} />
+        </Section>
       )}
 
       {/* Step 2: Preview */}
       {step === 'preview' && preview && (
         <Section>
+          {/* Import Mode Toggle */}
+          {state.hasData && (
+            <div className="flex items-center gap-4 mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-400">Existing data detected</p>
+                <p className="text-xs text-amber-400/70 mt-0.5">
+                  You have {state.fills.length} fills. Choose how to handle this import.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setImportMode('merge')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    importMode === 'merge'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                      : 'bg-white/5 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  Merge
+                </button>
+                <button
+                  onClick={() => setImportMode('replace')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    importMode === 'replace'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                      : 'bg-white/5 text-slate-400 border border-white/10'
+                  }`}
+                >
+                  Replace
+                </button>
+              </div>
+            </div>
+          )}
+          
           <CSVPreview preview={preview} />
           
           <div className="flex gap-3 mt-6">
@@ -212,7 +179,7 @@ export function UploadPage() {
               Back
             </Button>
             <Button 
-              onClick={handlePreviewContinue} 
+              onClick={handlePreviewContinue}
               disabled={!preview.hasRequiredColumns || isProcessing}
               loading={isProcessing}
               className="flex-1"

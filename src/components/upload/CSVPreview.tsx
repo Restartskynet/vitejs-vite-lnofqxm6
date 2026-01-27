@@ -19,9 +19,14 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
+  // FIX: Safe fallback for allRows (use rows if allRows is not available)
+  const allRows = useMemo(() => {
+    return preview.allRows ?? preview.rows ?? [];
+  }, [preview.allRows, preview.rows]);
+
   // Filter and sort rows
   const processedRows = useMemo(() => {
-    let rows = [...preview.allRows];
+    let rows = [...allRows];
     
     // Search filter (search in all columns)
     if (searchTerm.trim()) {
@@ -42,7 +47,7 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
     }
     
     return rows;
-  }, [preview.allRows, searchTerm, sortColumn, sortDirection]);
+  }, [allRows, searchTerm, sortColumn, sortDirection]);
 
   const totalPages = Math.ceil(processedRows.length / pageSize);
   const startIdx = page * pageSize;
@@ -63,9 +68,13 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
     setPage(0); // Reset to first page
   };
 
+  // FIX: Safe fallback for detectedFormat
+  const detectedFormat = preview.detectedFormat ?? 'unknown';
+  const formatConfidence = preview.formatConfidence ?? 'low';
+  
   // Format badge style
-  const formatBadgeVariant = preview.detectedFormat === 'orders-records' ? 'info' : 
-                             preview.detectedFormat === 'orders-fills' ? 'success' : 'warning';
+  const formatBadgeVariant = detectedFormat === 'orders-records' ? 'info' : 
+                             detectedFormat === 'orders-fills' ? 'success' : 'warning';
 
   return (
     <Card className={className}>
@@ -78,9 +87,12 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
               {processedRows.length.toLocaleString()} rows
             </p>
             <Badge variant={formatBadgeVariant} size="sm">
-              {preview.detectedFormat === 'orders-records' ? 'Orders Records Format' :
-               preview.detectedFormat === 'orders-fills' ? 'Orders/Fills Format' : 'Unknown Format'}
+              {detectedFormat === 'orders-records' ? 'Orders Records Format' :
+               detectedFormat === 'orders-fills' ? 'Orders/Fills Format' : 'Unknown Format'}
             </Badge>
+            {formatConfidence && (
+              <span className="text-[10px] text-slate-600">({formatConfidence} confidence)</span>
+            )}
             <Badge 
               variant={preview.hasRequiredColumns ? 'success' : 'danger'} 
               size="sm"
@@ -144,9 +156,9 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
             {currentRows.map((row, rowIdx) => (
               <tr 
                 key={startIdx + rowIdx} 
-                className="border-b border-white/5 hover:bg-white/[0.02]"
+                className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
               >
-                <td className="px-4 py-2 text-slate-500 text-xs">
+                <td className="px-4 py-2 text-slate-600 tabular-nums">
                   {startIdx + rowIdx + 1}
                 </td>
                 {row.map((cell, cellIdx) => (
@@ -155,20 +167,21 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
                     className="px-4 py-2 text-slate-300 whitespace-nowrap max-w-[200px] truncate"
                     title={cell}
                   >
-                    {cell || <span className="text-slate-600">—</span>}
+                    {cell || <span className="text-slate-600 italic">empty</span>}
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
-        
-        {currentRows.length === 0 && (
-          <div className="p-8 text-center text-slate-500">
-            {searchTerm ? 'No rows match your search' : 'No data rows'}
-          </div>
-        )}
       </div>
+      
+      {/* Empty state */}
+      {currentRows.length === 0 && (
+        <div className="py-8 text-center text-slate-500">
+          {searchTerm ? `No rows matching "${searchTerm}"` : 'No data to display'}
+        </div>
+      )}
       
       {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-white/10">
@@ -177,7 +190,7 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
           <select
             value={pageSize}
             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-            className="px-2 py-1 rounded bg-white/5 border border-white/10 text-sm text-white focus:outline-none focus:border-blue-500/50"
+            className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500/50"
           >
             {PAGE_SIZES.map(size => (
               <option key={size} value={size}>{size}</option>
@@ -186,31 +199,50 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
         </div>
         
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-          >
-            Prev
-          </Button>
-          
-          <span className="text-sm text-slate-400 min-w-[100px] text-center">
-            Page {page + 1} of {Math.max(1, totalPages)}
+          <span className="text-xs text-slate-500">
+            {processedRows.length > 0 
+              ? `${startIdx + 1}-${endIdx} of ${processedRows.length}` 
+              : '0 rows'
+            }
           </span>
-          
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-          >
-            Next
-          </Button>
-        </div>
-        
-        <div className="text-xs text-slate-500">
-          Showing {startIdx + 1}-{endIdx} of {processedRows.length}
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage(0)}
+              disabled={page === 0}
+              className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setPage(p => p - 1)}
+              disabled={page === 0}
+              className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={page >= totalPages - 1}
+              className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setPage(totalPages - 1)}
+              disabled={page >= totalPages - 1}
+              className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </Card>
