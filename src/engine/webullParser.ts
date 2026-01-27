@@ -1,247 +1,292 @@
-import type { Fill, Trade } from './types';
+import type { Fill, ImportResult, ValidationError, ValidationWarning, CSVPreview } from './types';
+
+// Required columns for Webull Orders CSV
+const REQUIRED_COLUMNS = [
+  'Symbol',
+  'Side',
+  'Filled Qty',
+  'Avg Price',
+  'Filled Time',
+  'Order No.',
+];
+
+const COLUMN_ALIASES: Record<string, string[]> = {
+  'Symbol': ['Symbol', 'Ticker', 'Stock Symbol'],
+  'Side': ['Side', 'Action', 'Buy/Sell'],
+  'Filled Qty': ['Filled Qty', 'Filled Quantity', 'Qty', 'Quantity', 'Shares', 'Filled'],
+  'Avg Price': ['Avg Price', 'Average Price', 'Price', 'Fill Price'],
+  'Filled Time': ['Filled Time', 'Fill Time', 'Time', 'Date/Time', 'Executed Time'],
+  'Order No.': ['Order No.', 'Order Number', 'Order ID', 'OrderId'],
+};
 
 /**
- * Generate a stable trade ID
+ * Parse CSV text into rows and columns
  */
-function generateTradeId(symbol: string, marketDate: string, index: number): string {
-  const raw = `${symbol}-${marketDate}-${index}`;
-  let hash = 0;
-  for (let i = 0; i < raw.length; i++) {
-    const char = raw.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return `trade_${Math.abs(hash).toString(36)}`;
-}
-
-/**
- * Calculate weighted average price from fills
- */
-function weightedAvgPrice(fills: Fill[]): number {
-  const totalQty = fills.reduce((sum, f) => sum + f.quantity, 0);
-  if (totalQty === 0) return 0;
-  const totalValue = fills.reduce((sum, f) => sum + f.quantity * f.price, 0);
-  return totalValue / totalQty;
-}
-
-/**
- * Calculate total commission from fills
- */
-function totalCommission(fills: Fill[]): number {
-  return fills.reduce((sum, f) => sum + f.commission, 0);
-}
-
-/**
- * Calculate duration in minutes between two dates
- */
-function durationMinutes(start: Date, end: Date): number {
-  return Math.round((end.getTime() - start.getTime()) / 60000);
-}
-
-/**
- * Determine trade outcome based on P&L
- */
-function determineOutcome(pnl: number, isOpen: boolean): 'WIN' | 'LOSS' | 'BREAKEVEN' | 'OPEN' {
-  if (isOpen) return 'OPEN';
-  if (pnl > 0.01) return 'WIN';
-  if (pnl < -0.01) return 'LOSS';
-  return 'BREAKEVEN';
-}
-
-/**
- * Build trades from fills using Position Session method
- * (All same-day, same-symbol fills are grouped into one trade)
- */
-export function buildTrades(fills: Fill[], startingEquity: number = 25000): Trade[] {
-  // Group fills by symbol and market date
-  const grouped = new Map<string, Fill[]>();
+function parseCSVText(text: string): string[][] {
+  const lines = text.trim().split(/\r?\n/);
+  const result: string[][] = [];
   
-  for (const fill of fills) {
-    const key = `${fill.symbol}|${fill.marketDate}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, []);
-    }
-    grouped.get(key)!.push(fill);
-  }
-  
-  const trades: Trade[] = [];
-  let tradeIndex = 0;
-  
-  // Process each group
-  for (const [key, groupFills] of grouped) {
-    const [symbol, marketDate] = key.split('|');
+  for (const line of lines) {
+    const row: string[] = [];
+    let current = '';
+    let inQuotes = false;
     
-    // Sort fills by time within the group
-    groupFills.sort((a, b) => a.filledTime.getTime() - b.filledTime.getTime());
-    
-    // Separate buys and sells
-    const buyFills = groupFills.filter(f => f.side === 'BUY');
-    const sellFills = groupFills.filter(f => f.side === 'SELL');
-    
-    const totalBuyQty = buyFills.reduce((sum, f) => sum + f.quantity, 0);
-    const totalSellQty = sellFills.reduce((sum, f) => sum + f.quantity, 0);
-    
-    // Determine if this is a long or short trade
-    // If buys came first (by time) and there are more buys or equal, it's a long
-    const firstBuy = buyFills[0]?.filledTime.getTime() ?? Infinity;
-    const firstSell = sellFills[0]?.filledTime.getTime() ?? Infinity;
-    const isLong = firstBuy <= firstSell;
-    
-    // Entry and exit fills based on trade direction
-    const entryFills = isLong ? buyFills : sellFills;
-    const exitFills = isLong ? sellFills : buyFills;
-    
-    const entryQty = entryFills.reduce((sum, f) => sum + f.quantity, 0);
-    const exitQty = exitFills.reduce((sum, f) => sum + f.quantity, 0);
-    
-    // Calculate position details
-    const quantity = Math.max(entryQty, exitQty);
-    const remainingQty = isLong ? totalBuyQty - totalSellQty : totalSellQty - totalBuyQty;
-    const isOpen = remainingQty > 0;
-    
-    // Prices
-    const entryPrice = weightedAvgPrice(entryFills);
-    const exitPrice = exitFills.length > 0 ? weightedAvgPrice(exitFills) : null;
-    
-    // Dates
-    const entryDate = entryFills[0]?.filledTime ?? new Date();
-    const exitDate = exitFills.length > 0 ? exitFills[exitFills.length - 1].filledTime : null;
-    
-    // P&L calculation
-    const closedQty = Math.min(entryQty, exitQty);
-    let realizedPnL = 0;
-    if (exitPrice !== null && closedQty > 0) {
-      if (isLong) {
-        realizedPnL = (exitPrice - entryPrice) * closedQty;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(current.trim());
+        current = '';
       } else {
-        realizedPnL = (entryPrice - exitPrice) * closedQty;
+        current += char;
       }
     }
-    
-    // Commission
-    const commission = totalCommission(groupFills);
-    realizedPnL -= commission;
-    
-    // Unrealized P&L (would need current price, assume 0 for now)
-    const unrealizedPnL = 0;
-    const totalPnL = realizedPnL + unrealizedPnL;
-    
-    // P&L percent
-    const costBasis = entryPrice * closedQty;
-    const pnlPercent = costBasis > 0 ? (realizedPnL / costBasis) * 100 : 0;
-    
-    // Risk calculations (simplified - would need stop price for accurate calc)
-    const riskUsed = startingEquity * 0.03; // Assume 3% risk
-    const riskPercent = 3;
-    
-    const trade: Trade = {
-      id: generateTradeId(symbol, marketDate, tradeIndex++),
-      symbol,
-      side: isLong ? 'LONG' : 'SHORT',
-      status: isOpen ? 'OPEN' : 'CLOSED',
-      
-      entryDate,
-      entryPrice,
-      entryFills,
-      
-      exitDate,
-      exitPrice,
-      exitFills,
-      
-      quantity,
-      remainingQty: Math.max(0, remainingQty),
-      
-      realizedPnL,
-      unrealizedPnL,
-      totalPnL,
-      pnlPercent,
-      commission,
-      
-      riskUsed,
-      riskPercent,
-      stopPrice: null, // Would need user input or calculation
-      
-      outcome: determineOutcome(realizedPnL, isOpen),
-      
-      marketDate,
-      durationMinutes: exitDate ? durationMinutes(entryDate, exitDate) : null,
-    };
-    
-    trades.push(trade);
+    row.push(current.trim());
+    result.push(row);
   }
   
-  // Sort trades by entry date (most recent first)
-  trades.sort((a, b) => b.entryDate.getTime() - a.entryDate.getTime());
-  
-  return trades;
+  return result;
 }
 
 /**
- * Calculate aggregate metrics from trades
+ * Find column index by name or alias
  */
-export function calculateMetrics(trades: Trade[]) {
-  const closedTrades = trades.filter(t => t.status === 'CLOSED');
-  const wins = closedTrades.filter(t => t.outcome === 'WIN');
-  const losses = closedTrades.filter(t => t.outcome === 'LOSS');
-  const breakeven = closedTrades.filter(t => t.outcome === 'BREAKEVEN');
+function findColumnIndex(headers: string[], targetColumn: string): number {
+  const aliases = COLUMN_ALIASES[targetColumn] || [targetColumn];
+  const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
   
-  const totalPnL = closedTrades.reduce((sum, t) => sum + t.realizedPnL, 0);
-  const grossWins = wins.reduce((sum, t) => sum + t.realizedPnL, 0);
-  const grossLosses = Math.abs(losses.reduce((sum, t) => sum + t.realizedPnL, 0));
+  for (const alias of aliases) {
+    const idx = normalizedHeaders.indexOf(alias.toLowerCase());
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+/**
+ * Parse Webull date format: "MM/DD/YYYY HH:MM:SS EST"
+ */
+function parseWebullDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
   
-  const avgWin = wins.length > 0 ? grossWins / wins.length : 0;
-  const avgLoss = losses.length > 0 ? grossLosses / losses.length : 0;
-  const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? Infinity : 0;
+  // Try to parse "01/22/2026 09:53:04 EST" format
+  const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+  if (!match) return null;
   
-  // Calculate streaks
-  let currentStreak = 0;
-  let streakType: 'WIN' | 'LOSS' | 'NONE' = 'NONE';
-  let maxConsecutiveWins = 0;
-  let maxConsecutiveLosses = 0;
-  let tempWinStreak = 0;
-  let tempLossStreak = 0;
+  const [, month, day, year, hour, minute, second] = match;
+  const parsed = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
   
-  // Process trades in chronological order for streaks
-  const chronological = [...closedTrades].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Get market date (YYYY-MM-DD) from a timestamp
+ */
+function getMarketDate(date: Date): string {
+  // Simple approach: use local date
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Preview CSV file (first 5 rows)
+ */
+export function previewCSV(text: string): CSVPreview {
+  const rows = parseCSVText(text);
   
-  for (const trade of chronological) {
-    if (trade.outcome === 'WIN') {
-      tempWinStreak++;
-      tempLossStreak = 0;
-      maxConsecutiveWins = Math.max(maxConsecutiveWins, tempWinStreak);
-    } else if (trade.outcome === 'LOSS') {
-      tempLossStreak++;
-      tempWinStreak = 0;
-      maxConsecutiveLosses = Math.max(maxConsecutiveLosses, tempLossStreak);
-    }
+  if (rows.length === 0) {
+    return {
+      headers: [],
+      rows: [],
+      totalRows: 0,
+      hasRequiredColumns: false,
+      missingColumns: REQUIRED_COLUMNS,
+    };
   }
   
-  // Current streak from most recent trade
-  if (chronological.length > 0) {
-    const lastTrade = chronological[chronological.length - 1];
-    if (lastTrade.outcome === 'WIN') {
-      streakType = 'WIN';
-      currentStreak = tempWinStreak;
-    } else if (lastTrade.outcome === 'LOSS') {
-      streakType = 'LOSS';
-      currentStreak = tempLossStreak;
+  const headers = rows[0];
+  const dataRows = rows.slice(1, 6); // First 5 data rows
+  
+  const missingColumns: string[] = [];
+  for (const col of REQUIRED_COLUMNS) {
+    if (findColumnIndex(headers, col) === -1) {
+      missingColumns.push(col);
     }
   }
   
   return {
-    totalTrades: closedTrades.length,
-    wins: wins.length,
-    losses: losses.length,
-    breakeven: breakeven.length,
-    winRate: closedTrades.length > 0 ? wins.length / closedTrades.length : 0,
-    totalPnL,
-    avgWin,
-    avgLoss,
-    profitFactor: Number.isFinite(profitFactor) ? profitFactor : 0,
-    maxDrawdownPct: 0, // Will be calculated from equity curve
-    currentStreak,
-    streakType,
-    maxConsecutiveWins,
-    maxConsecutiveLosses,
+    headers,
+    rows: dataRows,
+    totalRows: rows.length - 1,
+    hasRequiredColumns: missingColumns.length === 0,
+    missingColumns,
+  };
+}
+
+/**
+ * Parse Webull Orders CSV into fills
+ */
+export function parseWebullCSV(text: string): ImportResult {
+  const rows = parseCSVText(text);
+  
+  if (rows.length < 2) {
+    return {
+      success: false,
+      fills: [],
+      errors: [{ row: 0, column: '', message: 'CSV file is empty or has no data rows', value: '' }],
+      warnings: [],
+      stats: { totalRows: 0, validFills: 0, skippedRows: 0, dateRange: null, symbols: [] },
+    };
+  }
+  
+  const headers = rows[0];
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
+  const fills: Fill[] = [];
+  
+  // Find column indices
+  const colIndices: Record<string, number> = {};
+  for (const col of REQUIRED_COLUMNS) {
+    const idx = findColumnIndex(headers, col);
+    if (idx === -1) {
+      errors.push({ row: 0, column: col, message: `Required column "${col}" not found`, value: '' });
+    }
+    colIndices[col] = idx;
+  }
+  
+  // Also check for optional columns
+  const commissionIdx = findColumnIndex(headers, 'Commission');
+  const statusIdx = findColumnIndex(headers, 'Status');
+  
+  if (errors.length > 0) {
+    return {
+      success: false,
+      fills: [],
+      errors,
+      warnings,
+      stats: { totalRows: rows.length - 1, validFills: 0, skippedRows: rows.length - 1, dateRange: null, symbols: [] },
+    };
+  }
+  
+  // Parse each data row
+  const symbols = new Set<string>();
+  let minDate: Date | null = null;
+  let maxDate: Date | null = null;
+  
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 1; // 1-indexed for user display
+    
+    // Skip empty rows
+    if (row.every(cell => !cell.trim())) {
+      continue;
+    }
+    
+    // Check status if available - only process "Filled" orders
+    if (statusIdx >= 0) {
+      const status = row[statusIdx]?.trim().toLowerCase();
+      if (status && status !== 'filled') {
+        continue; // Skip non-filled orders
+      }
+    }
+    
+    // Extract values
+    const symbol = row[colIndices['Symbol']]?.trim().toUpperCase();
+    const sideRaw = row[colIndices['Side']]?.trim().toUpperCase();
+    const qtyRaw = row[colIndices['Filled Qty']]?.trim().replace(/,/g, '');
+    const priceRaw = row[colIndices['Avg Price']]?.trim().replace(/[$,@]/g, '');
+    const timeRaw = row[colIndices['Filled Time']]?.trim();
+    const orderIdRaw = row[colIndices['Order No.']]?.trim();
+    const commissionRaw = commissionIdx >= 0 ? row[commissionIdx]?.trim().replace(/[$,]/g, '') : '0';
+    
+    // Validate symbol
+    if (!symbol) {
+      warnings.push({ row: rowNum, message: 'Missing symbol, row skipped' });
+      continue;
+    }
+    
+    // Parse side
+    let side: 'BUY' | 'SELL';
+    if (sideRaw?.includes('BUY')) {
+      side = 'BUY';
+    } else if (sideRaw?.includes('SELL')) {
+      side = 'SELL';
+    } else {
+      warnings.push({ row: rowNum, message: `Invalid side "${sideRaw}", row skipped` });
+      continue;
+    }
+    
+    // Parse quantity
+    const quantity = parseFloat(qtyRaw);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      warnings.push({ row: rowNum, message: `Invalid quantity "${qtyRaw}", row skipped` });
+      continue;
+    }
+    
+    // Parse price
+    const price = parseFloat(priceRaw);
+    if (!Number.isFinite(price) || price <= 0) {
+      warnings.push({ row: rowNum, message: `Invalid price "${priceRaw}", row skipped` });
+      continue;
+    }
+    
+    // Parse time
+    const filledTime = parseWebullDate(timeRaw);
+    if (!filledTime) {
+      warnings.push({ row: rowNum, message: `Invalid date "${timeRaw}", row skipped` });
+      continue;
+    }
+    
+    // Parse commission
+    const commission = parseFloat(commissionRaw) || 0;
+    
+    // Generate fill ID
+    const fillId = `${symbol}|${side}|${quantity}|${price.toFixed(6)}|${filledTime.toISOString()}`;
+    
+    // Create fill
+    const fill: Fill = {
+      id: fillId,
+      symbol,
+      side,
+      quantity,
+      price,
+      filledTime,
+      orderId: orderIdRaw || '',
+      commission,
+      marketDate: getMarketDate(filledTime),
+    };
+    
+    fills.push(fill);
+    symbols.add(symbol);
+    
+    // Track date range
+    if (!minDate || filledTime < minDate) minDate = filledTime;
+    if (!maxDate || filledTime > maxDate) maxDate = filledTime;
+  }
+  
+  // Sort fills by time
+  fills.sort((a, b) => a.filledTime.getTime() - b.filledTime.getTime());
+  
+  const dateRange = minDate && maxDate
+    ? { start: getMarketDate(minDate), end: getMarketDate(maxDate) }
+    : null;
+  
+  return {
+    success: fills.length > 0,
+    fills,
+    errors,
+    warnings,
+    stats: {
+      totalRows: rows.length - 1,
+      validFills: fills.length,
+      skippedRows: rows.length - 1 - fills.length,
+      dateRange,
+      symbols: Array.from(symbols).sort(),
+    },
   };
 }

@@ -1,6 +1,6 @@
 # ImportSpec — Webull Orders Records (v1)
 
-Last Updated: 2026-01-25  
+Last Updated: 2026-01-26 
 Scope: Phase 1 (MVP) — Webull Orders Records CSV only
 
 ## 1. Goal
