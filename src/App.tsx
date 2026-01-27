@@ -2,16 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DashboardProvider } from './stores/dashboardStore';
 import { AppShell } from './components/layout';
 import { DashboardPage, UploadPage, TradesPage, SettingsPage } from './pages';
-<BrowserRouter
-  future={{
-    v7_startTransition: true,
-    v7_relativeSplatPath: true,
-  }}
-></BrowserRouter>
+
 function App() {
   return (
     <DashboardProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppShell>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
