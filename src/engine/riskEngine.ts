@@ -1,4 +1,4 @@
-import type { Trade, RiskState, StrategyConfig, DailyEquity } from './types';
+import type { Trade, RiskState, StrategyConfig, DailyEquity, ClosedTradeOutcome } from './types';
 
 export const DEFAULT_STRATEGY: StrategyConfig = {
   id: 'restart-throttle',
@@ -56,13 +56,15 @@ export function calculateRiskStates(
   
   for (const date of dates) {
     const dayTrades = tradesByDate.get(date)!;
-    let lastOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | null = null;
+    let lastOutcome: ClosedTradeOutcome | null = null;
     
     // Process each trade for that day
     for (const trade of dayTrades) {
       equity += trade.realizedPnL;
       lastOutcome = trade.outcome as 'WIN' | 'LOSS' | 'BREAKEVEN';
-      
+      if (trade.outcome !== 'OPEN') {
+        lastOutcome = trade.outcome;
+      }
       // Apply strategy rules
       if (currentMode === 'HIGH') {
         if (trade.outcome === 'LOSS') {

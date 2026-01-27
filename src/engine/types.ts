@@ -33,7 +33,15 @@ export interface Fill {
   commission: number;
   marketDate: string; // YYYY-MM-DD in ET
 }
+/**
+ * Trade status
+ */
+export type TradeStatus = 'OPEN' | 'CLOSED';
 
+/**
+ * Trade outcome for closed trades only
+ */
+export type ClosedTradeOutcome = 'WIN' | 'LOSS' | 'BREAKEVEN';
 /**
  * A completed trade (entry + exit fills matched)
  */
@@ -41,7 +49,7 @@ export interface Trade {
   id: string;
   symbol: string;
   side: 'LONG' | 'SHORT';
-  status: 'CLOSED' | 'OPEN';
+  status: TradeStatus;
   
   // Entry
   entryDate: Date;
@@ -70,7 +78,7 @@ export interface Trade {
   stopPrice: number | null;
   
   // Classification
-  outcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | 'OPEN';
+  outcome: ClosedTradeOutcome | 'OPEN';
   
   // Metadata
   marketDate: string;
@@ -104,7 +112,7 @@ export interface RiskState {
   equity: number;
   lowWinsProgress: number;
   lowWinsNeeded: number;
-  lastTradeOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | null;
+  lastTradeOutcome: ClosedTradeOutcome | null;
 }
 
 /**

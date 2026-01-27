@@ -1,4 +1,4 @@
-import type { Fill, Trade, TradeWithRisk, PendingOrder, RiskStateSnapshot } from './types';
+import type { Fill, Trade, ClosedTradeOutcome, TradeWithRisk, PendingOrder, RiskStateSnapshot } from './types';
 import { hashString } from '../lib/hash';
 
 // ============================================================================
@@ -46,7 +46,7 @@ function durationMinutes(start: Date, end: Date): number {
   return Math.round((end.getTime() - start.getTime()) / 60000);
 }
 
-function determineOutcome(pnl: number, isOpen: boolean): 'WIN' | 'LOSS' | 'BREAKEVEN' | 'OPEN' {
+function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'OPEN' {
   if (isOpen) return 'OPEN';
   // Use small threshold to avoid floating point issues
   if (pnl > 0.005) return 'WIN';
@@ -426,6 +426,10 @@ export function buildTrades(
  * Calculate aggregate metrics from trades
  */
 export function calculateMetrics(trades: Trade[]) {
+  if (!Array.isArray(trades)) {
+    console.warn('calculateMetrics received non-array:', typeof trades);
+    trades = [];
+  }
   const closedTrades = trades.filter(t => t.status === 'CLOSED');
   const wins = closedTrades.filter(t => t.outcome === 'WIN');
   const losses = closedTrades.filter(t => t.outcome === 'LOSS');
