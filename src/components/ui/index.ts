@@ -3,3 +3,4 @@ export { Badge, ModeBadge } from './badge';
 export { Button } from './button';
 export { Input, CurrencyInput, SearchInput } from './input';
 export { ConfirmModal } from './ConfirmModal';
+export { Modal } from './Modal';

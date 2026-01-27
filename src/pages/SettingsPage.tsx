@@ -3,15 +3,18 @@ import { useDashboard } from '../stores/dashboardStore';
 import { Page } from '../components/layout';
 import { Card, Button, CurrencyInput, Input, Badge, ConfirmModal } from '../components/ui';
 import { ImportHistory } from '../components/upload';
-import { formatPercent } from '../lib/utils';
-import { DEFAULT_STRATEGY } from '../types';
+import { AdjustmentsTable } from '../components/adjustments';
+import { StrategyModal } from '../components/strategy';
+import { BackupRestore } from '../components/backup';
+import { formatPercent, formatMoney } from '../lib/utils';
+import type { PersistedFill, PersistedData } from '../types';
 
 export function SettingsPage() {
   const { state, actions } = useDashboard();
-  const { settings, adjustments, hasData, importHistory, schemaWarning } = state;
-  const strategy = DEFAULT_STRATEGY;
+  const { settings, adjustments, hasData, importHistory, schemaWarning, strategy, fills } = state;
   
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showStrategyModal, setShowStrategyModal] = useState(false);
 
   const handleStartingEquityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
@@ -27,6 +30,24 @@ export function SettingsPage() {
     setShowResetModal(false);
   };
 
+  // Convert fills to persisted format for backup
+  const persistedFills: PersistedFill[] = fills.map(f => ({
+    id: f.id,
+    fingerprint: f.id,
+    symbol: f.symbol,
+    side: f.side,
+    quantity: f.quantity,
+    price: f.price,
+    filledTime: f.filledTime.toISOString(),
+    orderId: f.orderId,
+    commission: f.commission,
+    marketDate: f.marketDate,
+  }));
+
+  const handleImportBackup = (data: PersistedData, mode: 'replace' | 'merge') => {
+    actions.importBackup(data, mode);
+  };
+
   return (
     <Page title="Settings" subtitle="Configure your account and preferences">
       {/* Schema Warning Banner */}
@@ -35,14 +56,12 @@ export function SettingsPage() {
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
               </svg>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-amber-400">{schemaWarning}</p>
-              <Button variant="ghost" size="sm" onClick={actions.dismissSchemaWarning} className="mt-2">
-                Dismiss
-              </Button>
+            <div>
+              <h4 className="text-sm font-semibold text-amber-400 mb-1">Schema Version Warning</h4>
+              <p className="text-sm text-slate-400">{schemaWarning}</p>
             </div>
           </div>
         </Card>
@@ -52,71 +71,93 @@ export function SettingsPage() {
         {/* Account Settings */}
         <Card>
           <h3 className="text-lg font-semibold text-white mb-4">Account Settings</h3>
+          
           <div className="space-y-4">
-            <CurrencyInput 
-              label="Starting Equity" 
-              value={settings.startingEquity.toString()} 
-              onChange={handleStartingEquityChange} 
-              helper="Your account value before the first imported trade" 
-            />
-            <Input 
-              label="Starting Date" 
-              type="date" 
-              value={settings.startingDate} 
-              onChange={handleStartingDateChange} 
-              helper="Date to begin equity calculations" 
-            />
+            <div>
+              <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500 mb-1.5">
+                Starting Equity
+              </label>
+              <CurrencyInput
+                value={settings.startingEquity}
+                onChange={handleStartingEquityChange}
+                placeholder="25000"
+              />
+              <p className="mt-1.5 text-xs text-slate-500">
+                Your account value before the first trade
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500 mb-1.5">
+                Starting Date
+              </label>
+              <Input
+                type="date"
+                value={settings.startingDate}
+                onChange={handleStartingDateChange}
+              />
+              <p className="mt-1.5 text-xs text-slate-500">
+                Date to begin equity calculations
+              </p>
+            </div>
           </div>
         </Card>
 
         {/* Active Strategy */}
         <Card>
           <h3 className="text-lg font-semibold text-white mb-4">Active Strategy</h3>
+          
           <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 mb-4">
             <div className="flex items-center gap-2 mb-2">
               <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
-              <span className="text-sm font-medium text-purple-400">Current</span>
+              <Badge variant="info" size="sm">Current</Badge>
             </div>
             <p className="text-xl font-bold text-white">{strategy.name}</p>
-            <p className="text-xs text-slate-400 mt-1">
-              HIGH: {formatPercent(strategy.highModeRiskPct)} risk • LOW: {formatPercent(strategy.lowModeRiskPct)} risk • {strategy.winsToRecover} wins to recover
+            <p className="text-sm text-slate-400 mt-1">
+              HIGH: {formatPercent(strategy.highModeRiskPct, 2)} • 
+              LOW: {formatPercent(strategy.lowModeRiskPct, 2)} • 
+              {strategy.winsToRecover} wins to recover
             </p>
           </div>
-          <Button variant="secondary" size="sm" disabled>Change Strategy (Coming Soon)</Button>
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider">HIGH Mode</p>
+              <p className="text-lg font-bold text-emerald-400">{formatPercent(strategy.highModeRiskPct, 2)}</p>
+              <p className="text-xs text-slate-500">{formatMoney(settings.startingEquity * strategy.highModeRiskPct)} risk</p>
+            </div>
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-[10px] text-amber-400/70 uppercase tracking-wider">LOW Mode</p>
+              <p className="text-lg font-bold text-amber-400">{formatPercent(strategy.lowModeRiskPct, 2)}</p>
+              <p className="text-xs text-slate-500">{formatMoney(settings.startingEquity * strategy.lowModeRiskPct)} risk</p>
+            </div>
+          </div>
+
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            onClick={() => setShowStrategyModal(true)}
+            icon={
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+            }
+          >
+            Edit Strategy
+          </Button>
         </Card>
 
         {/* Manual Adjustments */}
-        <Card className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-white">Manual Adjustments</h3>
-              <p className="text-xs text-slate-500">Deposits, withdrawals, fees, and corrections</p>
-            </div>
-            <Button variant="secondary" size="sm" disabled>Add</Button>
-          </div>
-          {adjustments.length > 0 ? (
-            <div className="space-y-2">
-              {adjustments.map((adj) => (
-                <div key={adj.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
-                  <div className="flex items-center gap-3">
-                    <Badge variant={adj.amount >= 0 ? 'success' : 'danger'} size="sm">{adj.type}</Badge>
-                    <div>
-                      <p className="text-sm font-medium text-white">${Math.abs(adj.amount).toLocaleString()}</p>
-                      <p className="text-xs text-slate-500">{adj.date} {adj.note && `• ${adj.note}`}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-slate-500">
-              <p className="text-sm">No adjustments yet</p>
-              <p className="text-xs mt-1">Add deposits, withdrawals, or fees to track account equity</p>
-            </div>
-          )}
-        </Card>
+        <div className="lg:col-span-2">
+          <AdjustmentsTable
+            adjustments={adjustments}
+            onAdd={actions.addAdjustment}
+            onUpdate={actions.updateAdjustment}
+            onDelete={actions.deleteAdjustment}
+          />
+        </div>
 
         {/* Import History */}
         <div className="lg:col-span-2">
@@ -154,8 +195,13 @@ export function SettingsPage() {
           </div>
           
           <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" size="sm" disabled>Export Data</Button>
-            <Button variant="secondary" size="sm" disabled>Import Backup</Button>
+            <BackupRestore
+              fills={persistedFills}
+              settings={settings}
+              importHistory={importHistory}
+              adjustments={adjustments}
+              onImport={handleImportBackup}
+            />
             <Button 
               variant="danger" 
               size="sm" 
@@ -167,6 +213,14 @@ export function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      {/* Strategy Modal */}
+      <StrategyModal
+        isOpen={showStrategyModal}
+        onClose={() => setShowStrategyModal(false)}
+        onSave={actions.updateStrategy}
+        strategy={strategy}
+      />
 
       {/* Reset Confirmation Modal */}
       <ConfirmModal

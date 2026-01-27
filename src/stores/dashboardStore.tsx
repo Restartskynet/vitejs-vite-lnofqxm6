@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useState, type ReactNode } from 'react';
-import type { Fill, Trade, DailyEquity, ImportResult } from '../engine/types';
-import type { Metrics, Settings, UploadStatus, CurrentRisk, ImportHistoryEntry, PersistedFill } from '../types';
-import { DEFAULT_SETTINGS, EMPTY_METRICS, EMPTY_CURRENT_RISK, CURRENT_SCHEMA_VERSION } from '../types';
+import type { Fill, Trade, DailyEquity, ImportResult, StrategyConfig } from '../engine/types';
+import type { Metrics, Settings, UploadStatus, CurrentRisk, ImportHistoryEntry, PersistedFill, PersistedData, PersistedAdjustment } from '../types';
+import { DEFAULT_SETTINGS, EMPTY_METRICS, EMPTY_CURRENT_RISK, CURRENT_SCHEMA_VERSION, DEFAULT_STRATEGY } from '../types';
 import { buildTrades, calculateMetrics } from '../engine/tradesBuilder';
-import { getCurrentRisk, calculateDailyEquity, calculateMaxDrawdown, DEFAULT_STRATEGY } from '../engine/riskEngine';
+import { getCurrentRisk, calculateDailyEquity, calculateMaxDrawdown } from '../engine/riskEngine';
 import { loadPersistedData, savePersistedData, clearPersistedData, createEmptyPersistedData, isIndexedDBAvailable } from '../lib/db';
 import { generateFillFingerprint } from '../lib/hash';
 
@@ -43,6 +43,7 @@ interface DashboardState {
   // User config
   settings: Settings;
   adjustments: Adjustment[];
+  strategy: StrategyConfig;
 
   // UI state
   uploadStatus: UploadStatus;
@@ -64,6 +65,7 @@ const initialState: DashboardState = {
   metrics: EMPTY_METRICS,
   settings: DEFAULT_SETTINGS,
   adjustments: [],
+  strategy: { ...DEFAULT_STRATEGY },
   uploadStatus: 'idle',
   uploadResult: null,
   isLoading: true,
@@ -88,45 +90,87 @@ type Action =
   | { type: 'ADD_ADJUSTMENT'; payload: Adjustment }
   | { type: 'UPDATE_ADJUSTMENT'; payload: Adjustment }
   | { type: 'DELETE_ADJUSTMENT'; payload: string }
+  | { type: 'SET_ADJUSTMENTS'; payload: Adjustment[] }
+  | { type: 'SET_STRATEGY'; payload: StrategyConfig }
+  | { type: 'IMPORT_BACKUP'; payload: { data: PersistedData; mode: 'replace' | 'merge' } }
   | { type: 'CLEAR_DATA' }
-  | { type: 'HYDRATE'; payload: { fills: Fill[]; fingerprints: string[]; settings: Settings; importHistory: ImportHistoryEntry[]; adjustments: Adjustment[] } }
+  | { type: 'HYDRATE'; payload: { fills: Fill[]; fingerprints: string[]; settings: Settings; importHistory: ImportHistoryEntry[]; adjustments: Adjustment[]; strategy?: StrategyConfig } }
   | { type: 'SET_HYDRATED' }
   | { type: 'SET_SCHEMA_WARNING'; payload: string | null };
 
-  function recomputeDerivedData(fills: Fill[], startingEquity: number) {
-    // buildTrades returns { trades, riskTimeline } - MUST destructure!
-    const buildResult = buildTrades(fills, startingEquity);
-    
-    // Extract the trades array from the result
-    // Handle both object return { trades: [...] } and array return [...] for compatibility
-    let tradesArray: Trade[];
-    if (Array.isArray(buildResult)) {
-      tradesArray = buildResult;
-    } else if (buildResult && typeof buildResult === 'object' && 'trades' in buildResult) {
-      tradesArray = buildResult.trades;
-    } else {
-      console.warn('buildTrades returned unexpected type:', typeof buildResult);
-      tradesArray = [];
-    }
-    
-    const metrics = calculateMetrics(tradesArray);
-    const dailyEquity = calculateDailyEquity(tradesArray, startingEquity);
-    metrics.maxDrawdownPct = calculateMaxDrawdown(dailyEquity);
-    const riskState = getCurrentRisk(tradesArray, startingEquity, DEFAULT_STRATEGY);
-    
-    const currentRisk: CurrentRisk = {
-      asOfDate: riskState.date,
-      mode: riskState.mode,
-      todayRiskPct: riskState.riskPct,
-      allowedRiskDollars: riskState.allowedRiskDollars,
-      equity: riskState.equity,
-      lowWinsProgress: riskState.lowWinsProgress,
-      lowWinsNeeded: riskState.lowWinsNeeded,
-      forecast: riskState.forecast,
-    };
+/**
+ * Calculate total adjustments up to a given date
+ */
+function calculateAdjustmentsToDate(adjustments: Adjustment[], date: string): number {
+  return adjustments
+    .filter(adj => adj.date <= date)
+    .reduce((sum, adj) => sum + adj.amount, 0);
+}
+
+/**
+ * Calculate total adjustments
+ */
+function calculateTotalAdjustments(adjustments: Adjustment[]): number {
+  return adjustments.reduce((sum, adj) => sum + adj.amount, 0);
+}
+
+/**
+ * Recompute derived data from fills including adjustments
+ */
+function recomputeDerivedData(
+  fills: Fill[], 
+  startingEquity: number, 
+  adjustments: Adjustment[] = [],
+  strategy: StrategyConfig = DEFAULT_STRATEGY
+) {
+  // buildTrades returns { trades, riskTimeline } - MUST destructure!
+  const buildResult = buildTrades(fills, startingEquity);
   
-    return { trades: tradesArray, metrics, dailyEquity, currentRisk };
+  // Extract the trades array from the result
+  let tradesArray: Trade[];
+  if (Array.isArray(buildResult)) {
+    tradesArray = buildResult;
+  } else if (buildResult && typeof buildResult === 'object' && 'trades' in buildResult) {
+    tradesArray = buildResult.trades;
+  } else {
+    console.warn('buildTrades returned unexpected type:', typeof buildResult);
+    tradesArray = [];
   }
+  
+  const metrics = calculateMetrics(tradesArray);
+  
+  // Calculate daily equity with adjustments applied
+  const baseDailyEquity = calculateDailyEquity(tradesArray, startingEquity);
+  
+  // Apply adjustments to daily equity
+  const dailyEquity = baseDailyEquity.map(day => {
+    const adjustmentToDate = calculateAdjustmentsToDate(adjustments, day.date);
+    return {
+      ...day,
+      accountEquity: day.tradingEquity + adjustmentToDate,
+    };
+  });
+  
+  metrics.maxDrawdownPct = calculateMaxDrawdown(dailyEquity);
+  
+  // Calculate risk state with adjusted equity
+  const totalAdjustments = calculateTotalAdjustments(adjustments);
+  const adjustedStartingEquity = startingEquity + totalAdjustments;
+  const riskState = getCurrentRisk(tradesArray, adjustedStartingEquity, strategy);
+  
+  const currentRisk: CurrentRisk = {
+    asOfDate: riskState.date,
+    mode: riskState.mode,
+    todayRiskPct: riskState.riskPct,
+    allowedRiskDollars: riskState.allowedRiskDollars,
+    equity: riskState.equity,
+    lowWinsProgress: riskState.lowWinsProgress,
+    lowWinsNeeded: riskState.lowWinsNeeded,
+    forecast: riskState.forecast,
+  };
+
+  return { trades: tradesArray, metrics, dailyEquity, currentRisk };
+}
 
 function dashboardReducer(state: DashboardState, action: Action): DashboardState {
   switch (action.type) {
@@ -179,8 +223,8 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
         mergedFills.sort((a, b) => a.filledTime.getTime() - b.filledTime.getTime());
       }
       
-      // Recompute derived data
-      const derived = recomputeDerivedData(mergedFills, state.settings.startingEquity);
+      // Recompute derived data with adjustments
+      const derived = recomputeDerivedData(mergedFills, state.settings.startingEquity, state.adjustments, state.strategy);
       
       // Create import history entry
       const historyEntry: ImportHistoryEntry = {
@@ -210,7 +254,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           fillCount: metadata.fillCount,
           dateRange: metadata.dateRange,
         },
-        importHistory: [historyEntry, ...state.importHistory].slice(0, 50), // Keep last 50
+        importHistory: [historyEntry, ...state.importHistory].slice(0, 50),
         ...derived,
         hasData: mergedFills.length > 0,
         uploadStatus: 'success',
@@ -230,7 +274,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       };
 
     case 'PROCESS_DATA': {
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity);
+      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, state.adjustments, state.strategy);
       return { ...state, ...derived };
     }
 
@@ -238,53 +282,151 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       const newSettings = { ...state.settings, ...action.payload };
       
       if (action.payload.startingEquity && state.hasData) {
-        const derived = recomputeDerivedData(state.fills, newSettings.startingEquity);
+        const derived = recomputeDerivedData(state.fills, newSettings.startingEquity, state.adjustments, state.strategy);
         return { ...state, settings: newSettings, ...derived };
       }
       
       return { ...state, settings: newSettings };
     }
 
-    case 'ADD_ADJUSTMENT':
-      return { ...state, adjustments: [...state.adjustments, action.payload] };
+    case 'ADD_ADJUSTMENT': {
+      const newAdjustments = [...state.adjustments, action.payload];
+      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, newAdjustments, state.strategy);
+      return { ...state, adjustments: newAdjustments, ...derived };
+    }
 
-    case 'UPDATE_ADJUSTMENT':
-      return {
-        ...state,
-        adjustments: state.adjustments.map((a) =>
-          a.id === action.payload.id ? action.payload : a
-        ),
-      };
+    case 'UPDATE_ADJUSTMENT': {
+      const newAdjustments = state.adjustments.map((a) =>
+        a.id === action.payload.id ? action.payload : a
+      );
+      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, newAdjustments, state.strategy);
+      return { ...state, adjustments: newAdjustments, ...derived };
+    }
 
-    case 'DELETE_ADJUSTMENT':
-      return {
-        ...state,
-        adjustments: state.adjustments.filter((a) => a.id !== action.payload),
-      };
+    case 'DELETE_ADJUSTMENT': {
+      const newAdjustments = state.adjustments.filter((a) => a.id !== action.payload);
+      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, newAdjustments, state.strategy);
+      return { ...state, adjustments: newAdjustments, ...derived };
+    }
 
-    case 'CLEAR_DATA':
+    case 'SET_ADJUSTMENTS': {
+      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, action.payload, state.strategy);
+      return { ...state, adjustments: action.payload, ...derived };
+    }
+
+    case 'SET_STRATEGY': {
+      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, state.adjustments, action.payload);
+      return { ...state, strategy: action.payload, ...derived };
+    }
+
+    case 'IMPORT_BACKUP': {
+      const { data, mode } = action.payload;
+      
+      if (mode === 'replace') {
+        // Replace all data
+        const fills = data.fills.map(pf => ({
+          ...pf,
+          filledTime: new Date(pf.filledTime),
+        }));
+        
+        const derived = recomputeDerivedData(
+          fills, 
+          data.settings?.startingEquity || state.settings.startingEquity,
+          data.adjustments || [],
+          state.strategy
+        );
+        
+        return {
+          ...state,
+          fills,
+          fillFingerprints: new Set(data.fillFingerprints || []),
+          settings: data.settings || state.settings,
+          importHistory: data.importHistory || [],
+          adjustments: data.adjustments || [],
+          ...derived,
+          hasData: fills.length > 0,
+        };
+      } else {
+        // Merge mode
+        const existingFps = new Set(state.fillFingerprints);
+        const existingHistoryIds = new Set(state.importHistory.map(h => h.id));
+        const existingAdjIds = new Set(state.adjustments.map(a => a.id));
+        
+        // Merge fills
+        const newFills = data.fills
+          .filter(pf => !existingFps.has(pf.fingerprint || pf.id))
+          .map(pf => ({
+            ...pf,
+            filledTime: new Date(pf.filledTime),
+          }));
+        
+        const mergedFills = [...state.fills, ...newFills].sort(
+          (a, b) => a.filledTime.getTime() - b.filledTime.getTime()
+        );
+        
+        // Merge fingerprints
+        const mergedFps = new Set(state.fillFingerprints);
+        data.fillFingerprints?.forEach(fp => mergedFps.add(fp));
+        
+        // Merge import history
+        const newHistory = (data.importHistory || []).filter(h => !existingHistoryIds.has(h.id));
+        const mergedHistory = [...state.importHistory, ...newHistory].slice(0, 50);
+        
+        // Merge adjustments
+        const newAdjustments = (data.adjustments || []).filter(a => !existingAdjIds.has(a.id));
+        const mergedAdjustments = [...state.adjustments, ...newAdjustments];
+        
+        const derived = recomputeDerivedData(
+          mergedFills, 
+          state.settings.startingEquity,
+          mergedAdjustments,
+          state.strategy
+        );
+        
+        return {
+          ...state,
+          fills: mergedFills,
+          fillFingerprints: mergedFps,
+          importHistory: mergedHistory,
+          adjustments: mergedAdjustments,
+          ...derived,
+          hasData: mergedFills.length > 0,
+        };
+      }
+    }
+
+    case 'CLEAR_DATA': {
       return {
         ...initialState,
         settings: state.settings,
+        strategy: state.strategy,
         isHydrated: true,
         isLoading: false,
       };
+    }
 
     case 'HYDRATE': {
-      const { fills, fingerprints, settings, importHistory, adjustments } = action.payload;
-      const derived = fills.length > 0 
-        ? recomputeDerivedData(fills, settings.startingEquity)
-        : { trades: [], metrics: EMPTY_METRICS, dailyEquity: [], currentRisk: EMPTY_CURRENT_RISK };
+      const { fills, fingerprints, settings, importHistory, adjustments, strategy } = action.payload;
+      
+      // Convert ISO strings back to Date objects
+      const hydratedFills = fills.map(f => ({
+        ...f,
+        filledTime: new Date(f.filledTime),
+      }));
+      
+      const hydratedStrategy = strategy || state.strategy;
+      const derived = recomputeDerivedData(hydratedFills, settings.startingEquity, adjustments, hydratedStrategy);
       
       return {
         ...state,
-        fills,
+        fills: hydratedFills,
         fillFingerprints: new Set(fingerprints),
         settings,
         importHistory,
         adjustments,
+        strategy: hydratedStrategy,
         ...derived,
-        hasData: fills.length > 0,
+        hasData: hydratedFills.length > 0,
         isHydrated: true,
         isLoading: false,
       };
@@ -307,20 +449,19 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
 
 interface DashboardContextValue {
   state: DashboardState;
-  dispatch: React.Dispatch<Action>;
   actions: {
-    setLoading: (isLoading: boolean) => void;
     setUploadStatus: (status: UploadStatus) => void;
     setUploadResult: (result: ImportResult | null) => void;
-    importFills: (fills: Fill[], metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }, mode?: 'merge' | 'replace') => void;
+    importFills: (fills: Fill[], metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }, mode: 'merge' | 'replace') => Promise<void>;
     clearImportHistory: () => void;
-    processData: () => void;
     updateSettings: (settings: Partial<Settings>) => void;
     addAdjustment: (adjustment: Adjustment) => void;
     updateAdjustment: (adjustment: Adjustment) => void;
     deleteAdjustment: (id: string) => void;
+    updateStrategy: (strategy: StrategyConfig) => void;
+    importBackup: (data: PersistedData, mode: 'replace' | 'merge') => Promise<void>;
     clearData: () => Promise<void>;
-    dismissSchemaWarning: () => void;
+    processData: () => void;
   };
 }
 
@@ -332,49 +473,55 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(dashboardReducer, initialState);
+  const [saveQueued, setSaveQueued] = useState(false);
 
-  // Hydrate from IndexedDB on mount
+  // Load persisted data on mount
   useEffect(() => {
     async function hydrate() {
       if (!isIndexedDBAvailable()) {
-        console.warn('IndexedDB not available, using memory-only mode');
+        console.warn('IndexedDB not available');
         dispatch({ type: 'SET_HYDRATED' });
         return;
       }
 
       try {
-        const persisted = await loadPersistedData();
+        const data = await loadPersistedData();
         
-        if (persisted) {
-          // Convert persisted fills back to Fill objects
-          const fills: Fill[] = persisted.fills.map(pf => ({
-            id: pf.id,
-            symbol: pf.symbol,
-            side: pf.side,
-            quantity: pf.quantity,
-            price: pf.price,
-            filledTime: new Date(pf.filledTime),
-            orderId: pf.orderId,
-            commission: pf.commission,
-            marketDate: pf.marketDate,
-          }));
-
+        if (data) {
+          // Check schema version
+          if (data.schemaVersion > CURRENT_SCHEMA_VERSION) {
+            dispatch({ 
+              type: 'SET_SCHEMA_WARNING', 
+              payload: `Data was created with a newer version (v${data.schemaVersion}). Some features may not work correctly.` 
+            });
+          }
+          
           dispatch({
             type: 'HYDRATE',
             payload: {
-              fills,
-              fingerprints: persisted.fillFingerprints,
-              settings: persisted.settings,
-              importHistory: persisted.importHistory,
-              adjustments: persisted.adjustments,
+              fills: data.fills.map(pf => ({
+                id: pf.id,
+                symbol: pf.symbol,
+                side: pf.side,
+                quantity: pf.quantity,
+                price: pf.price,
+                filledTime: new Date(pf.filledTime),
+                orderId: pf.orderId,
+                commission: pf.commission,
+                marketDate: pf.marketDate,
+              })),
+              fingerprints: data.fillFingerprints,
+              settings: data.settings,
+              importHistory: data.importHistory,
+              adjustments: data.adjustments,
+              strategy: (data as PersistedData & { strategy?: StrategyConfig }).strategy,
             },
           });
         } else {
           dispatch({ type: 'SET_HYDRATED' });
         }
       } catch (error) {
-        console.error('Failed to hydrate from IndexedDB:', error);
-        dispatch({ type: 'SET_SCHEMA_WARNING', payload: 'Failed to load saved data. Starting fresh.' });
+        console.error('Failed to load persisted data:', error);
         dispatch({ type: 'SET_HYDRATED' });
       }
     }
@@ -382,11 +529,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     hydrate();
   }, []);
 
-  // Persist to IndexedDB when state changes
+  // Persist data when state changes (debounced)
   useEffect(() => {
-    if (!state.isHydrated || !isIndexedDBAvailable()) return;
+    if (!state.isHydrated || state.isLoading) return;
 
-    async function persist() {
+    setSaveQueued(true);
+    const timeout = setTimeout(async () => {
       try {
         const persistedFills: PersistedFill[] = state.fills.map(f => ({
           id: f.id,
@@ -401,106 +549,117 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           marketDate: f.marketDate,
         }));
 
-        await savePersistedData({
+        const dataToSave: PersistedData & { strategy?: StrategyConfig } = {
           schemaVersion: CURRENT_SCHEMA_VERSION,
           fills: persistedFills,
           fillFingerprints: Array.from(state.fillFingerprints),
           settings: state.settings,
           importHistory: state.importHistory,
           adjustments: state.adjustments,
-        });
-      } catch (error) {
-        console.error('Failed to persist to IndexedDB:', error);
-      }
-    }
+          strategy: state.strategy,
+        };
 
-    // Debounce persistence
-    const timeoutId = setTimeout(persist, 500);
-    return () => clearTimeout(timeoutId);
-  }, [state.fills, state.settings, state.importHistory, state.adjustments, state.isHydrated, state.fillFingerprints]);
-
-  const actions = {
-    setLoading: useCallback((isLoading: boolean) => {
-      dispatch({ type: 'SET_LOADING', payload: isLoading });
-    }, []),
-    
-    setUploadStatus: useCallback((status: UploadStatus) => {
-      dispatch({ type: 'SET_UPLOAD_STATUS', payload: status });
-    }, []),
-    
-    setUploadResult: useCallback((result: ImportResult | null) => {
-      dispatch({ type: 'SET_UPLOAD_RESULT', payload: result });
-    }, []),
-    
-    importFills: useCallback((
-      fills: Fill[], 
-      metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null },
-      mode: 'merge' | 'replace' = 'merge'
-    ) => {
-      dispatch({ type: 'IMPORT_FILLS', payload: { fills, metadata, mode } });
-    }, []),
-    
-    clearImportHistory: useCallback(() => {
-      dispatch({ type: 'CLEAR_IMPORT_HISTORY' });
-    }, []),
-    
-    processData: useCallback(() => {
-      dispatch({ type: 'PROCESS_DATA' });
-    }, []),
-    
-    updateSettings: useCallback((settings: Partial<Settings>) => {
-      dispatch({ type: 'SET_SETTINGS', payload: settings });
-    }, []),
-    
-    addAdjustment: useCallback((adjustment: Adjustment) => {
-      dispatch({ type: 'ADD_ADJUSTMENT', payload: adjustment });
-    }, []),
-    
-    updateAdjustment: useCallback((adjustment: Adjustment) => {
-      dispatch({ type: 'UPDATE_ADJUSTMENT', payload: adjustment });
-    }, []),
-    
-    deleteAdjustment: useCallback((id: string) => {
-      dispatch({ type: 'DELETE_ADJUSTMENT', payload: id });
-    }, []),
-    
-    clearData: useCallback(async () => {
-      try {
-        await clearPersistedData();
+        await savePersistedData(dataToSave);
+        setSaveQueued(false);
       } catch (error) {
-        console.error('Failed to clear IndexedDB:', error);
+        console.error('Failed to persist data:', error);
       }
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [state.fills, state.settings, state.importHistory, state.adjustments, state.strategy, state.isHydrated, state.isLoading, state.fillFingerprints]);
+
+  // Actions
+  const setUploadStatus = useCallback((status: UploadStatus) => {
+    dispatch({ type: 'SET_UPLOAD_STATUS', payload: status });
+  }, []);
+
+  const setUploadResult = useCallback((result: ImportResult | null) => {
+    dispatch({ type: 'SET_UPLOAD_RESULT', payload: result });
+  }, []);
+
+  const importFills = useCallback(async (
+    fills: Fill[],
+    metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null },
+    mode: 'merge' | 'replace'
+  ) => {
+    dispatch({ type: 'IMPORT_FILLS', payload: { fills, metadata, mode } });
+  }, []);
+
+  const clearImportHistory = useCallback(() => {
+    dispatch({ type: 'CLEAR_IMPORT_HISTORY' });
+  }, []);
+
+  const updateSettings = useCallback((settings: Partial<Settings>) => {
+    dispatch({ type: 'SET_SETTINGS', payload: settings });
+  }, []);
+
+  const addAdjustment = useCallback((adjustment: Adjustment) => {
+    dispatch({ type: 'ADD_ADJUSTMENT', payload: adjustment });
+  }, []);
+
+  const updateAdjustment = useCallback((adjustment: Adjustment) => {
+    dispatch({ type: 'UPDATE_ADJUSTMENT', payload: adjustment });
+  }, []);
+
+  const deleteAdjustment = useCallback((id: string) => {
+    dispatch({ type: 'DELETE_ADJUSTMENT', payload: id });
+  }, []);
+
+  const updateStrategy = useCallback((strategy: StrategyConfig) => {
+    dispatch({ type: 'SET_STRATEGY', payload: strategy });
+  }, []);
+
+  const importBackup = useCallback(async (data: PersistedData, mode: 'replace' | 'merge') => {
+    dispatch({ type: 'IMPORT_BACKUP', payload: { data, mode } });
+  }, []);
+
+  const clearData = useCallback(async () => {
+    try {
+      await clearPersistedData();
       dispatch({ type: 'CLEAR_DATA' });
-    }, []),
-    
-    dismissSchemaWarning: useCallback(() => {
-      dispatch({ type: 'SET_SCHEMA_WARNING', payload: null });
-    }, []),
+    } catch (error) {
+      console.error('Failed to clear data:', error);
+    }
+  }, []);
+
+  const processData = useCallback(() => {
+    dispatch({ type: 'PROCESS_DATA' });
+  }, []);
+
+  const value: DashboardContextValue = {
+    state,
+    actions: {
+      setUploadStatus,
+      setUploadResult,
+      importFills,
+      clearImportHistory,
+      updateSettings,
+      addAdjustment,
+      updateAdjustment,
+      deleteAdjustment,
+      updateStrategy,
+      importBackup,
+      clearData,
+      processData,
+    },
   };
 
   return (
-    <DashboardContext.Provider value={{ state, dispatch, actions }}>
+    <DashboardContext.Provider value={value}>
       {children}
     </DashboardContext.Provider>
   );
 }
 
 // ============================================================================
-// HOOKS
+// HOOK
 // ============================================================================
 
-export function useDashboard(): DashboardContextValue {
+export function useDashboard() {
   const context = useContext(DashboardContext);
   if (!context) {
     throw new Error('useDashboard must be used within a DashboardProvider');
   }
   return context;
-}
-
-export function useDashboardState(): DashboardState {
-  return useDashboard().state;
-}
-
-export function useDashboardActions(): DashboardContextValue['actions'] {
-  return useDashboard().actions;
 }
