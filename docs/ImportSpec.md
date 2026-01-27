@@ -142,7 +142,7 @@ Warnings may include:
 
 ## 8. Non-Goals (v1)
 
-- No broker auto-detection beyond Webull Orders Records
+- No broker auto-detection beyond Webull Orders Records.
 - No partial fill modeling
 - No corporate action handling
 - No live prices, no market data APIs

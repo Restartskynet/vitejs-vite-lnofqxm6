@@ -13,7 +13,6 @@ function toNumber(v: string): number {
   const n = Number(s);
   return Number.isFinite(n) ? n : NaN;
 }
-
 // Webull exports timestamps like: "01/22/2026 09:53:04 EST"
 // We convert to a real Date by translating TZ suffix to a numeric offset.
 function parseWebullTimestamp(text: string): Date | null {
