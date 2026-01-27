@@ -653,7 +653,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 }
 
 // ============================================================================
-// HOOK
+// HOOKS
 // ============================================================================
 
 export function useDashboard() {
@@ -662,4 +662,40 @@ export function useDashboard() {
     throw new Error('useDashboard must be used within a DashboardProvider');
   }
   return context;
+}
+
+/**
+ * Convenience hook that returns just the state (for components that only need to read state)
+ * This is the shape expected by components importing useDashboardState
+ */
+export function useDashboardState() {
+  const { state } = useDashboard();
+  return {
+    // Raw data
+    fills: state.fills,
+    fillFingerprints: state.fillFingerprints,
+    importMetadata: state.importMetadata,
+    
+    // Import history
+    importHistory: state.importHistory,
+    
+    // Derived data
+    trades: state.trades,
+    dailyEquity: state.dailyEquity,
+    currentRisk: state.currentRisk,
+    metrics: state.metrics,
+    
+    // User config
+    settings: state.settings,
+    adjustments: state.adjustments,
+    strategy: state.strategy,
+    
+    // UI state
+    uploadStatus: state.uploadStatus,
+    uploadResult: state.uploadResult,
+    isLoading: state.isLoading,
+    hasData: state.hasData,
+    isHydrated: state.isHydrated,
+    schemaWarning: state.schemaWarning,
+  };
 }
