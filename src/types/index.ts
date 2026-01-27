@@ -142,3 +142,12 @@ export const EMPTY_CURRENT_RISK: CurrentRisk = {
     ifLoss: { mode: 'LOW', riskPct: 0.001 },
   },
 };
+// Import history types
+export type {
+  ImportHistoryEntry,
+  PersistedData,
+  PersistedFill,
+  PersistedSettings,
+  PersistedAdjustment,
+} from './importHistory';
+export { CURRENT_SCHEMA_VERSION } from './importHistory';
