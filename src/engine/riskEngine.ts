@@ -10,6 +10,25 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
 };
 
 /**
+ * Ensure input is a valid Trade array - defensive helper
+ */
+function ensureTradesArray(trades: unknown): Trade[] {
+  if (!trades) {
+    return [];
+  }
+  if (Array.isArray(trades)) {
+    return trades;
+  }
+  // Handle case where trades is an object with a 'trades' property
+  if (typeof trades === 'object' && 'trades' in trades && Array.isArray((trades as { trades: unknown }).trades)) {
+    console.warn('riskEngine: received object with trades property, extracting array');
+    return (trades as { trades: Trade[] }).trades;
+  }
+  console.warn('riskEngine: received non-array trades:', typeof trades);
+  return [];
+}
+
+/**
  * Calculate risk states for each day based on trade history
  */
 export function calculateRiskStates(
@@ -17,8 +36,11 @@ export function calculateRiskStates(
   startingEquity: number,
   strategy: StrategyConfig = DEFAULT_STRATEGY
 ): RiskState[] {
+  // Defensive: ensure trades is an array
+  const tradesArray = ensureTradesArray(trades);
+  
   // Sort trades chronologically
-  const sortedTrades = [...trades]
+  const sortedTrades = [...tradesArray]
     .filter(t => t.status === 'CLOSED')
     .sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
   
@@ -61,10 +83,11 @@ export function calculateRiskStates(
     // Process each trade for that day
     for (const trade of dayTrades) {
       equity += trade.realizedPnL;
-      lastOutcome = trade.outcome as 'WIN' | 'LOSS' | 'BREAKEVEN';
+      // Only record outcome if it's a closed outcome (not OPEN)
       if (trade.outcome !== 'OPEN') {
         lastOutcome = trade.outcome;
       }
+      
       // Apply strategy rules
       if (currentMode === 'HIGH') {
         if (trade.outcome === 'LOSS') {
@@ -114,7 +137,10 @@ export function getCurrentRisk(
   startingEquity: number,
   strategy: StrategyConfig = DEFAULT_STRATEGY
 ): RiskState & { forecast: { ifWin: { mode: 'HIGH' | 'LOW'; riskPct: number }; ifLoss: { mode: 'HIGH' | 'LOW'; riskPct: number } } } {
-  const states = calculateRiskStates(trades, startingEquity, strategy);
+  // Defensive: ensure trades is an array
+  const tradesArray = ensureTradesArray(trades);
+  
+  const states = calculateRiskStates(tradesArray, startingEquity, strategy);
   const lastState = states[states.length - 1] || {
     date: new Date().toISOString().split('T')[0],
     mode: 'HIGH' as const,
@@ -162,7 +188,10 @@ export function calculateDailyEquity(
   trades: Trade[],
   startingEquity: number
 ): DailyEquity[] {
-  const sortedTrades = [...trades]
+  // Defensive: ensure trades is an array
+  const tradesArray = ensureTradesArray(trades);
+  
+  const sortedTrades = [...tradesArray]
     .filter(t => t.status === 'CLOSED')
     .sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
   
@@ -219,6 +248,6 @@ export function calculateDailyEquity(
  * Calculate max drawdown from equity curve
  */
 export function calculateMaxDrawdown(equityCurve: DailyEquity[]): number {
-  if (equityCurve.length === 0) return 0;
+  if (!Array.isArray(equityCurve) || equityCurve.length === 0) return 0;
   return Math.min(...equityCurve.map(d => d.drawdownPct));
 }

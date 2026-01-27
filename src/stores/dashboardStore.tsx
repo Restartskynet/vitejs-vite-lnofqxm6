@@ -93,26 +93,40 @@ type Action =
   | { type: 'SET_HYDRATED' }
   | { type: 'SET_SCHEMA_WARNING'; payload: string | null };
 
-function recomputeDerivedData(fills: Fill[], startingEquity: number) {
-  const trades = buildTrades(fills, startingEquity);
-  const metrics = calculateMetrics(trades);
-  const dailyEquity = calculateDailyEquity(trades, startingEquity);
-  metrics.maxDrawdownPct = calculateMaxDrawdown(dailyEquity);
-  const riskState = getCurrentRisk(trades, startingEquity, DEFAULT_STRATEGY);
+  function recomputeDerivedData(fills: Fill[], startingEquity: number) {
+    // buildTrades returns { trades, riskTimeline } - MUST destructure!
+    const buildResult = buildTrades(fills, startingEquity);
+    
+    // Extract the trades array from the result
+    // Handle both object return { trades: [...] } and array return [...] for compatibility
+    let tradesArray: Trade[];
+    if (Array.isArray(buildResult)) {
+      tradesArray = buildResult;
+    } else if (buildResult && typeof buildResult === 'object' && 'trades' in buildResult) {
+      tradesArray = buildResult.trades;
+    } else {
+      console.warn('buildTrades returned unexpected type:', typeof buildResult);
+      tradesArray = [];
+    }
+    
+    const metrics = calculateMetrics(tradesArray);
+    const dailyEquity = calculateDailyEquity(tradesArray, startingEquity);
+    metrics.maxDrawdownPct = calculateMaxDrawdown(dailyEquity);
+    const riskState = getCurrentRisk(tradesArray, startingEquity, DEFAULT_STRATEGY);
+    
+    const currentRisk: CurrentRisk = {
+      asOfDate: riskState.date,
+      mode: riskState.mode,
+      todayRiskPct: riskState.riskPct,
+      allowedRiskDollars: riskState.allowedRiskDollars,
+      equity: riskState.equity,
+      lowWinsProgress: riskState.lowWinsProgress,
+      lowWinsNeeded: riskState.lowWinsNeeded,
+      forecast: riskState.forecast,
+    };
   
-  const currentRisk: CurrentRisk = {
-    asOfDate: riskState.date,
-    mode: riskState.mode,
-    todayRiskPct: riskState.riskPct,
-    allowedRiskDollars: riskState.allowedRiskDollars,
-    equity: riskState.equity,
-    lowWinsProgress: riskState.lowWinsProgress,
-    lowWinsNeeded: riskState.lowWinsNeeded,
-    forecast: riskState.forecast,
-  };
-
-  return { trades, metrics, dailyEquity, currentRisk };
-}
+    return { trades: tradesArray, metrics, dailyEquity, currentRisk };
+  }
 
 function dashboardReducer(state: DashboardState, action: Action): DashboardState {
   switch (action.type) {
