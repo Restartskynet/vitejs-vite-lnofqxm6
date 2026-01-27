@@ -46,6 +46,15 @@ function durationMinutes(start: Date, end: Date): number {
   return Math.round((end.getTime() - start.getTime()) / 60000);
 }
 
+/**
+ * Determine outcome based on P&L and open status.
+ * Uses function overloads for proper type narrowing:
+ * - When isOpen is true (literal), returns 'OPEN'
+ * - When isOpen is false (literal), returns ClosedTradeOutcome
+ */
+function determineOutcome(pnl: number, isOpen: true): 'OPEN';
+function determineOutcome(pnl: number, isOpen: false): ClosedTradeOutcome;
+function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'OPEN';
 function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'OPEN' {
   if (isOpen) return 'OPEN';
   // Use small threshold to avoid floating point issues
@@ -59,7 +68,7 @@ function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'O
  */
 function applyRiskTransition(
   state: RiskEngineState, 
-  outcome: 'WIN' | 'LOSS' | 'BREAKEVEN',
+  outcome: ClosedTradeOutcome,
   pnl: number
 ): RiskEngineState {
   const newState = { ...state };
@@ -274,6 +283,7 @@ export function buildTrades(
         const costBasis = entryPrice * closingQty;
         const pnlPercent = costBasis > 0 ? (realizedPnL / costBasis) * 100 : 0;
         
+        // Using false literal ensures TypeScript narrows to ClosedTradeOutcome
         const outcome = determineOutcome(realizedPnL, false);
         
         // Record risk state BEFORE this trade closes
@@ -319,6 +329,7 @@ export function buildTrades(
         
         // Record risk timeline entry
         const stateBefore = { ...riskState };
+        // outcome is now properly typed as ClosedTradeOutcome due to function overload
         riskState = applyRiskTransition(riskState, outcome, realizedPnL);
         
         riskTimeline.push({
