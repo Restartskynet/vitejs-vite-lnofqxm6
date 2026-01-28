@@ -42,7 +42,7 @@ export function Navigation({ showLabels = true }: { showLabels?: boolean }) {
           to={item.path}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2 px-3 py-2 rounded-xl transition-all',
+              'flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
               'text-sm font-medium',
               isActive
                 ? 'bg-white/10 text-white shadow-lg shadow-black/30'
@@ -68,7 +68,7 @@ export function MobileNavigation() {
             to={item.path}
             className={({ isActive }) =>
               cn(
-                'flex flex-col items-center justify-center gap-1 w-16 py-2 rounded-lg transition-all',
+                'flex flex-col items-center justify-center gap-1 w-16 py-2 rounded-lg transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
                 isActive
                   ? 'text-sky-300'
                   : 'text-ink-subtle'

@@ -124,9 +124,13 @@ export function UploadPage() {
 
       {step === 'upload' && (
         <Section>
-          <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-6">
             <Card className="flex flex-col gap-6">
-              <div>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-ink-muted">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 motion-safe:animate-pulse" />
+                  Local-first import
+                </div>
                 <h3 className="text-lg font-semibold text-white">Drop your Webull Orders Records CSV</h3>
                 <p className="text-xs text-ink-muted">No uploads, no servers — everything stays on this device.</p>
               </div>
@@ -267,7 +271,14 @@ export function UploadPage() {
 
       {state.importHistory.length > 0 && step === 'upload' && (
         <Section className="mt-8">
-          <ImportHistory history={state.importHistory} />
+          <details className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-white">
+              Import history ({state.importHistory.length})
+            </summary>
+            <div className="mt-4">
+              <ImportHistory history={state.importHistory} />
+            </div>
+          </details>
         </Section>
       )}
     </Page>

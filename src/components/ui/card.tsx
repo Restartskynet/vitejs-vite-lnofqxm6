@@ -20,7 +20,8 @@ export function Card({ children, className, glow = 'none', noPadding = false }: 
     <div
       className={cn(
         'rounded-2xl border border-border/60 bg-surface/80 backdrop-blur-xl',
-        'transition-all duration-300',
+        'transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
+        'motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-white/20',
         glowClasses[glow],
         !noPadding && 'p-5 sm:p-6',
         className

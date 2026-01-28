@@ -58,7 +58,7 @@ export function Badge({ children, variant = 'neutral', size = 'md', pulse = fals
         className
       )}
     >
-      {pulse && <span className={cn('h-1.5 w-1.5 rounded-full animate-pulse', getPulseColor(variant))} />}
+      {pulse && <span className={cn('h-1.5 w-1.5 rounded-full motion-safe:animate-pulse', getPulseColor(variant))} />}
       {children}
     </span>
   );
