@@ -42,6 +42,8 @@ export function SettingsPage() {
     orderId: f.orderId,
     commission: f.commission,
     marketDate: f.marketDate,
+    rowIndex: f.rowIndex,
+    stopPrice: f.stopPrice ?? null,
   }));
 
   const handleImportBackup = (data: PersistedData, mode: 'replace' | 'merge') => {

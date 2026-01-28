@@ -13,7 +13,7 @@ export function TradeRow({ trade, isExpanded, onToggle }: TradeRowProps) {
     WIN: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
     LOSS: 'bg-red-500/15 text-red-400 border-red-500/30',
     BREAKEVEN: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
-    OPEN: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    ACTIVE: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   };
 
   const pnlColor = trade.totalPnL > 0 ? 'text-emerald-400' : trade.totalPnL < 0 ? 'text-red-400' : 'text-slate-400';
@@ -75,7 +75,7 @@ export function TradeRow({ trade, isExpanded, onToggle }: TradeRowProps) {
         </td>
         <td className="p-3 text-center">
           <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs border', outcomeColors[trade.outcome])}>
-            {trade.outcome}
+            {trade.status === 'ACTIVE' ? 'Active' : trade.outcome}
           </span>
         </td>
       </tr>

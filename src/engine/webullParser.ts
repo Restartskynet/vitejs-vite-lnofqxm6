@@ -78,7 +78,13 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   'Order Type': ['Order Type', 'Type', 'OrderType', 'Ord Type'],
   
   // Limit Price (for stop inference)
-  'Limit Price': ['Limit Price', 'Limit', 'Stop Price', 'Stop', 'Target Price'],
+  'Limit Price': ['Limit Price', 'Limit', 'Target Price'],
+  
+  // Stop/Trigger Price
+  'Stop Price': [
+    'Stop Price', 'Stop', 'Trigger Price', 'Stop Trigger', 'Stop/Trigger',
+    'Stop Price/Trigger', 'Trail Stop Price', 'Stop Price (USD)'
+  ],
 };
 
 // Core required columns - import fails without these
@@ -252,6 +258,21 @@ function parseWebullDate(dateStr: string): Date | null {
 
 function getMarketDate(date: Date): string {
   return date.toISOString().split('T')[0];
+}
+
+function parseNumber(raw: string | undefined | null): number | null {
+  if (!raw) return null;
+  const cleaned = raw.trim();
+  if (!cleaned || cleaned === '--') return null;
+  const isParenNegative = cleaned.startsWith('(') && cleaned.endsWith(')');
+  const normalized = cleaned
+    .replace(/[,$@]/g, '')
+    .replace(/[()]/g, '')
+    .replace(/\s+/g, '');
+  if (!normalized) return null;
+  const value = Number(normalized);
+  if (!Number.isFinite(value)) return null;
+  return isParenNegative ? -Math.abs(value) : value;
 }
 
 // ============================================================================
@@ -429,26 +450,32 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     const status = statusCol >= 0 ? row[statusCol]?.trim().toLowerCase() : 'filled';
     
     if (status && status !== 'filled' && status !== 'partial' && status !== 'partially filled') {
-      // Track cancelled/pending orders for stop inference
+      // Track cancelled/pending orders for stop/exit info (do not infer)
       if (status === 'pending' || status === 'working' || status === 'open') {
         const pendingSymbol = row[colIdx['Symbol']]?.trim().toUpperCase();
         const pendingSide = row[colIdx['Side']]?.trim().toUpperCase();
-        const pendingPrice = parseFloat(row[colIdx['Avg Price']]?.replace(/[$,@]/g, '') || '0');
-        const pendingQty = parseFloat(row[colIdx['Total Qty']]?.replace(/,/g, '') || row[colIdx['Filled Qty']]?.replace(/,/g, '') || '0');
+        const limitPrice = parseNumber(row[colIdx['Limit Price']]);
+        const stopPrice = parseNumber(row[colIdx['Stop Price']]);
+        const avgPrice = parseNumber(row[colIdx['Avg Price']]);
+        const pendingQty = parseNumber(row[colIdx['Total Qty']]) ?? parseNumber(row[colIdx['Filled Qty']]);
         const placedTimeRaw = colIdx['Placed Time'] >= 0 ? row[colIdx['Placed Time']] : null;
         const placedTime = placedTimeRaw ? parseWebullDate(placedTimeRaw) : new Date();
         const orderType = colIdx['Order Type'] >= 0 ? row[colIdx['Order Type']]?.trim().toUpperCase() : 'UNKNOWN';
+        const pendingType = orderType?.includes('STOP') ? 'STOP' : 
+          orderType?.includes('LIMIT') ? 'LIMIT' : 
+          orderType?.includes('MARKET') ? 'MARKET' : 'UNKNOWN';
+        const pendingPrice = limitPrice ?? avgPrice ?? null;
         
-        if (pendingSymbol && pendingPrice > 0 && placedTime) {
+        if (pendingSymbol && pendingSide && placedTime) {
           pendingOrders.push({
             symbol: pendingSymbol,
             side: pendingSide?.includes('BUY') ? 'BUY' : 'SELL',
             price: pendingPrice,
-            quantity: pendingQty || 1,
+            stopPrice: stopPrice ?? null,
+            limitPrice: limitPrice ?? null,
+            quantity: pendingQty ?? 0,
             placedTime,
-            type: orderType?.includes('STOP') ? 'STOP' : 
-                  orderType?.includes('LIMIT') ? 'LIMIT' : 
-                  orderType?.includes('MARKET') ? 'MARKET' : 'UNKNOWN',
+            type: pendingType,
           });
         }
       }
@@ -484,14 +511,14 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     }
     
     // Validate quantity
-    const quantity = parseFloat(qtyRaw?.replace(/,/g, '') || '');
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    const quantity = parseNumber(qtyRaw);
+    if (quantity === null || quantity <= 0) {
       rowReasons.push(`Invalid quantity: "${qtyRaw}"`);
     }
     
     // Validate price
-    const price = parseFloat(priceRaw?.replace(/[$,@]/g, '') || '');
-    if (!Number.isFinite(price) || price <= 0) {
+    const price = parseNumber(priceRaw);
+    if (price === null || price <= 0) {
       rowReasons.push(`Invalid price: "${priceRaw}"`);
     }
     
@@ -506,12 +533,18 @@ export function parseWebullCSV(text: string): ImportResultExtended {
       skippedRows.push({ rowIndex: rowNum, reasons: rowReasons, rawData });
       continue;
     }
+
+    if (quantity === null || price === null || !filledTime) {
+      skippedRows.push({ rowIndex: rowNum, reasons: ['Missing required numeric values'], rawData });
+      continue;
+    }
     
     // Parse commission (optional)
-    const commission = Math.abs(parseFloat(commissionRaw?.replace(/[$,]/g, '') || '0')) || 0;
+    const commission = Math.abs(parseNumber(commissionRaw) ?? 0);
+    const stopPrice = parseNumber(colIdx['Stop Price'] >= 0 ? row[colIdx['Stop Price']] : null);
     
     // Generate fingerprint for deduplication and orderId
-    const fingerprint = generateFillFingerprint(symbol!, side!, quantity, price, filledTime!);
+    const fingerprint = generateFillFingerprint(symbol!, side!, quantity, price, filledTime);
     const fillId = generateFillId(fingerprint);
     
     // Use orderId from CSV or generate from fingerprint
@@ -528,6 +561,8 @@ export function parseWebullCSV(text: string): ImportResultExtended {
       orderId,
       commission,
       marketDate: getMarketDate(filledTime!),
+      rowIndex: i - 1,
+      stopPrice: stopPrice ?? null,
       fingerprint,
     };
     
@@ -539,8 +574,12 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     if (!maxDate || filledTime! > maxDate) maxDate = filledTime!;
   }
   
-  // Sort fills by time
-  fills.sort((a, b) => a.filledTime.getTime() - b.filledTime.getTime());
+  // Sort fills by time with stable row order tie-breaker
+  fills.sort((a, b) => {
+    const timeDiff = a.filledTime.getTime() - b.filledTime.getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.rowIndex - b.rowIndex;
+  });
   
   const dateRange = minDate && maxDate
     ? { start: getMarketDate(minDate), end: getMarketDate(maxDate) }

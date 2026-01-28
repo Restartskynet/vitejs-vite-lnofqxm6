@@ -92,8 +92,8 @@ export function calculateRiskStates(
     // Process each trade for that day
     for (const trade of dayTrades) {
       equity += trade.realizedPnL;
-      // Only record outcome if it's a closed outcome (not OPEN)
-      if (trade.outcome !== 'OPEN') {
+      // Only record outcome if it's a closed outcome (not ACTIVE)
+      if (trade.outcome !== 'ACTIVE') {
         lastOutcome = trade.outcome;
       }
       
@@ -201,7 +201,7 @@ export function getCurrentRisk(
       },
       ifLoss: {
         mode: ifLossMode,
-        riskPct: ifLossMode === 'HIGH' ? strategy.highModeRiskPct : strategy.lowModeRiskPct,
+        riskPct: strategy.lowModeRiskPct,
       },
     },
   };

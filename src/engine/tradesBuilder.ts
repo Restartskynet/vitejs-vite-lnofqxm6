@@ -49,14 +49,14 @@ function durationMinutes(start: Date, end: Date): number {
 /**
  * Determine outcome based on P&L and open status.
  * Uses function overloads for proper type narrowing:
- * - When isOpen is true (literal), returns 'OPEN'
+ * - When isOpen is true (literal), returns 'ACTIVE'
  * - When isOpen is false (literal), returns ClosedTradeOutcome
  */
-function determineOutcome(pnl: number, isOpen: true): 'OPEN';
+function determineOutcome(pnl: number, isOpen: true): 'ACTIVE';
 function determineOutcome(pnl: number, isOpen: false): ClosedTradeOutcome;
-function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'OPEN';
-function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'OPEN' {
-  if (isOpen) return 'OPEN';
+function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'ACTIVE';
+function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'ACTIVE' {
+  if (isOpen) return 'ACTIVE';
   // Use small threshold to avoid floating point issues
   if (pnl > 0.005) return 'WIN';
   if (pnl < -0.005) return 'LOSS';
@@ -107,7 +107,7 @@ function applyRiskTransition(
 }
 
 /**
- * Find inferred stop price from pending orders
+ * Find pending stop/exit orders without inference
  */
 function findInferredStop(
   symbol: string,
@@ -115,7 +115,7 @@ function findInferredStop(
   entryPrice: number,
   entryTime: Date,
   pendingOrders: PendingOrder[]
-): { inferredStop: number | null; pendingExit: number | null; stopSource: 'inferred' | 'none' } {
+): { inferredStop: number | null; pendingExit: number | null; stopSource: 'user' | 'none' } {
   // Find pending orders for this symbol placed after entry
   const relevantPending = pendingOrders.filter(po => 
     po.symbol === symbol && 
@@ -128,41 +128,22 @@ function findInferredStop(
   
   let inferredStop: number | null = null;
   let pendingExit: number | null = null;
+  const exitSide = side === 'LONG' ? 'SELL' : 'BUY';
   
   for (const po of relevantPending) {
-    // For LONG position, a SELL below entry is a stop, above is exit target
-    // For SHORT position, a BUY above entry is a stop, below is exit target
-    if (side === 'LONG' && po.side === 'SELL') {
-      if (po.price < entryPrice) {
-        // Stop candidate
-        if (!inferredStop || po.price > inferredStop) {
-          inferredStop = po.price; // Closest stop
-        }
-      } else {
-        // Exit/target candidate
-        if (!pendingExit || po.price < pendingExit) {
-          pendingExit = po.price; // Closest target
-        }
-      }
-    } else if (side === 'SHORT' && po.side === 'BUY') {
-      if (po.price > entryPrice) {
-        // Stop candidate
-        if (!inferredStop || po.price < inferredStop) {
-          inferredStop = po.price;
-        }
-      } else {
-        // Exit/target candidate
-        if (!pendingExit || po.price > pendingExit) {
-          pendingExit = po.price;
-        }
-      }
+    if (po.side !== exitSide) continue;
+    if (po.type === 'STOP' && po.stopPrice !== null) {
+      inferredStop = po.stopPrice;
+    }
+    if (po.type === 'LIMIT' && po.price !== null) {
+      pendingExit = po.price;
     }
   }
   
   return { 
     inferredStop, 
     pendingExit, 
-    stopSource: inferredStop ? 'inferred' : 'none' 
+    stopSource: inferredStop ? 'user' : 'none' 
   };
 }
 
@@ -191,8 +172,7 @@ export function buildTrades(
   const sortedFills = [...fills].sort((a, b) => {
     const timeDiff = a.filledTime.getTime() - b.filledTime.getTime();
     if (timeDiff !== 0) return timeDiff;
-    // Tie-break by ID (stable)
-    return a.id.localeCompare(b.id);
+    return (a.rowIndex ?? 0) - (b.rowIndex ?? 0);
   });
   
   const trades: TradeWithRisk[] = [];
@@ -253,34 +233,38 @@ export function buildTrades(
       const closingQty = Math.min(fillQty, pos!.quantity);
       const remainingQty = pos!.quantity - closingQty;
       const flippingQty = fillQty - closingQty;
+      const commissionRatio = fill.quantity > 0 ? closingQty / fill.quantity : 0;
+      const closingFill: Fill = {
+        ...fill,
+        id: `${fill.id}-close`,
+        quantity: closingQty,
+        commission: fill.commission * commissionRatio,
+      };
       
-      pos!.exitFills.push(fill);
-      pos!.totalCommission += fill.commission;
-      
-      // Calculate P&L for closed portion
-      let realizedPnL = 0;
-      if (pos!.side === 'LONG') {
-        realizedPnL = (fillPrice - pos!.avgEntryPrice) * closingQty;
-      } else {
-        realizedPnL = (pos!.avgEntryPrice - fillPrice) * closingQty;
-      }
-      
-      // Deduct commission proportionally
-      const commissionForClose = pos!.totalCommission * (closingQty / (pos!.quantity + closingQty));
-      realizedPnL -= commissionForClose;
+      pos!.exitFills.push(closingFill);
+      pos!.totalCommission += closingFill.commission;
       
       // Determine if position is now closed
-      const isClosing = remainingQty === 0 || remainingQty < 0.001;
+      const isClosing = remainingQty <= 0.001;
       
       if (isClosing || flippingQty > 0) {
         // CREATE COMPLETED TRADE
-        const entryPrice = pos!.avgEntryPrice;
+        const entryPrice = weightedAvgPrice(pos!.entryFills);
         const exitPrice = weightedAvgPrice(pos!.exitFills);
-        const quantity = pos!.quantity;
+        const quantity = pos!.entryFills.reduce((sum, f) => sum + f.quantity, 0);
         const entryDate = pos!.firstEntryTime;
         const exitDate = fill.filledTime;
+        const commissionTotal = totalCommission(pos!.entryFills) + totalCommission(pos!.exitFills);
         
-        const costBasis = entryPrice * closingQty;
+        let realizedPnL = 0;
+        if (pos!.side === 'LONG') {
+          realizedPnL = (exitPrice - entryPrice) * quantity;
+        } else {
+          realizedPnL = (entryPrice - exitPrice) * quantity;
+        }
+        realizedPnL -= commissionTotal;
+        
+        const costBasis = entryPrice * quantity;
         const pnlPercent = costBasis > 0 ? (realizedPnL / costBasis) * 100 : 0;
         
         // Using false literal ensures TypeScript narrows to ClosedTradeOutcome
@@ -291,8 +275,9 @@ export function buildTrades(
         const equityAtEntry = riskState.equity;
         const riskDollarsAtEntry = equityAtEntry * riskPctAtEntry;
         
-        // Find inferred stop for OPEN trades (this trade is closing, so not needed)
-        const stopInfo = { inferredStop: null, pendingExit: null, stopSource: 'none' as const };
+        const exitStop = pos!.exitFills.find(exitFill => exitFill.stopPrice !== null && exitFill.stopPrice !== undefined)?.stopPrice ?? null;
+        const stopSource: 'user' | 'none' = exitStop ? 'user' : 'none';
+        const stopInfo = { inferredStop: exitStop, pendingExit: null, stopSource };
         
         const trade: TradeWithRisk = {
           id: generateTradeId(symbol, entryDate, tradeIndex++),
@@ -311,10 +296,10 @@ export function buildTrades(
           unrealizedPnL: 0,
           totalPnL: realizedPnL,
           pnlPercent,
-          commission: pos!.totalCommission,
+          commission: commissionTotal,
           riskUsed: riskDollarsAtEntry,
           riskPercent: riskPctAtEntry * 100,
-          stopPrice: null,
+          stopPrice: exitStop,
           outcome,
           marketDate: fill.marketDate,
           durationMinutes: durationMinutes(entryDate, exitDate),
@@ -350,15 +335,22 @@ export function buildTrades(
         if (flippingQty > 0) {
           // Start new position in opposite direction
           const newSide: 'LONG' | 'SHORT' = fillSide === 'BUY' ? 'LONG' : 'SHORT';
+          const flipCommissionRatio = fill.quantity > 0 ? flippingQty / fill.quantity : 0;
+          const flipFill: Fill = {
+            ...fill,
+            id: `${fill.id}-flip`,
+            quantity: flippingQty,
+            commission: fill.commission * flipCommissionRatio,
+          };
           positions.set(symbol, {
             symbol,
             side: newSide,
             quantity: flippingQty,
             avgEntryPrice: fillPrice,
-            entryFills: [fill],
+            entryFills: [flipFill],
             exitFills: [],
             firstEntryTime: fill.filledTime,
-            totalCommission: 0,
+            totalCommission: flipFill.commission,
           });
         } else {
           // Clear position
@@ -371,7 +363,7 @@ export function buildTrades(
     }
   }
   
-  // CREATE OPEN TRADES for remaining positions
+  // CREATE ACTIVE TRADES for remaining positions
   for (const [symbol, pos] of positions) {
     if (pos.quantity > 0.001) {
       const entryPrice = pos.avgEntryPrice;
@@ -383,14 +375,14 @@ export function buildTrades(
       const equityAtEntry = riskState.equity;
       const riskDollarsAtEntry = equityAtEntry * riskPctAtEntry;
       
-      // Find inferred stop for open trades
+      // Find pending stop for active trades
       const stopInfo = findInferredStop(symbol, pos.side, entryPrice, entryDate, pendingOrders);
       
       const trade: TradeWithRisk = {
         id: generateTradeId(symbol, entryDate, tradeIndex++),
         symbol,
         side: pos.side,
-        status: 'OPEN',
+        status: 'ACTIVE',
         entryDate,
         entryPrice,
         entryFills: [...pos.entryFills],
@@ -407,8 +399,8 @@ export function buildTrades(
         riskUsed: riskDollarsAtEntry,
         riskPercent: riskPctAtEntry * 100,
         stopPrice: stopInfo.inferredStop,
-        outcome: 'OPEN',
-        marketDate: pos.entryFills[0]?.marketDate || '',
+        outcome: 'ACTIVE',
+        marketDate: pos.entryFills[0]?.marketDate || entryDate.toISOString().split('T')[0],
         durationMinutes: null,
         // Extended fields
         riskPctAtEntry,
@@ -421,11 +413,11 @@ export function buildTrades(
     }
   }
   
-  // Sort trades: OPEN first, then by entryDate descending
+  // Sort trades: ACTIVE first, then by entryDate descending
   trades.sort((a, b) => {
-    // OPEN trades first
-    if (a.status === 'OPEN' && b.status !== 'OPEN') return -1;
-    if (a.status !== 'OPEN' && b.status === 'OPEN') return 1;
+    // ACTIVE trades first
+    if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+    if (a.status !== 'ACTIVE' && b.status === 'ACTIVE') return 1;
     // Then by entry time descending (most recent first)
     return b.entryDate.getTime() - a.entryDate.getTime();
   });

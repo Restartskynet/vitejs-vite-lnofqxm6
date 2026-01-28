@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Card } from '../ui';
-import { formatMoney, cn } from '../../lib/utils';
+import { formatMoney, formatDate, cn } from '../../lib/utils';
 import type { DailyEquity } from '../../engine/types';
 
 interface EquityChartProps {
@@ -64,6 +64,10 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const displayMin = showDrawdown ? 0 : chartData.minVal;
   const displayMax = showDrawdown ? Math.max(...chartData.drawdowns, 1) : chartData.maxVal;
   const displayRange = displayMax - displayMin || 1;
+  const axisMaxLabel = showDrawdown ? '0%' : formatMoney(displayMax);
+  const axisMinLabel = showDrawdown ? `-${displayMax.toFixed(1)}%` : formatMoney(displayMin);
+  const startDateLabel = safeData[0]?.date ? formatDate(safeData[0].date) : '';
+  const endDateLabel = safeData[safeData.length - 1]?.date ? formatDate(safeData[safeData.length - 1].date) : '';
 
   // Guard against single-point series causing division by zero
   const pointCount = displayValues.length;
@@ -119,7 +123,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
             useAccountEquity ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'
           )}
         >
-          Account
+          Account equity
         </button>
         <button
           onClick={() => setUseAccountEquity(false)}
@@ -128,8 +132,11 @@ export function EquityChart({ data, className }: EquityChartProps) {
             !useAccountEquity ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'
           )}
         >
-          Trading
+          Trading equity
         </button>
+        <span className="text-[10px] text-slate-500 self-center">
+          {useAccountEquity ? 'Includes adjustments' : 'Trades only'}
+        </span>
       </div>
 
       {/* Chart */}
@@ -137,6 +144,12 @@ export function EquityChart({ data, className }: EquityChartProps) {
         className="relative h-32 mb-4"
         onMouseLeave={() => setHoveredIndex(null)}
       >
+        <div className="absolute left-0 top-0 text-[10px] text-slate-500">
+          {axisMaxLabel}
+        </div>
+        <div className="absolute left-0 bottom-0 text-[10px] text-slate-500">
+          {axisMinLabel}
+        </div>
         <svg 
           viewBox={`0 0 ${width} ${height}`} 
           className="w-full h-full"
@@ -205,6 +218,11 @@ export function EquityChart({ data, className }: EquityChartProps) {
             )}
           </div>
         )}
+      </div>
+
+      <div className="flex items-center justify-between text-[10px] text-slate-500 mb-4">
+        <span>{startDateLabel}</span>
+        <span>{endDateLabel}</span>
       </div>
 
       {/* Footer stats */}

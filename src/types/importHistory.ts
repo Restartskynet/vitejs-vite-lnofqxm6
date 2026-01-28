@@ -46,6 +46,8 @@ export interface ImportHistoryEntry {
     orderId: string;
     commission: number;
     marketDate: string;
+    rowIndex?: number;
+    stopPrice?: number | null;
   }
   
   /**
