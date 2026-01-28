@@ -14,10 +14,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500/50 shadow-lg shadow-blue-500/20',
-  secondary: 'bg-white/[0.06] hover:bg-white/[0.1] text-white border-white/10 hover:border-white/20',
+  primary:
+    'bg-gradient-to-r from-blue-500 to-sky-400 text-slate-950 border-transparent shadow-lg shadow-blue-500/25 hover:brightness-110',
+  secondary:
+    'bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/10 hover:border-white/20',
   ghost: 'bg-transparent hover:bg-white/[0.06] text-slate-400 hover:text-white border-transparent',
-  danger: 'bg-red-600/80 hover:bg-red-500 text-white border-red-500/50 shadow-lg shadow-red-500/20',
+  danger: 'bg-red-500/80 hover:bg-red-500 text-white border-red-500/40 shadow-lg shadow-red-500/20',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -38,14 +40,25 @@ const Spinner = () => (
 );
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ children, variant = 'primary', size = 'md', icon, iconRight, loading = false, fullWidth = false, disabled, className, ...props }, ref) => {
+  ({
+    children,
+    variant = 'primary',
+    size = 'md',
+    icon,
+    iconRight,
+    loading = false,
+    fullWidth = false,
+    disabled,
+    className,
+    ...props
+  }, ref) => {
     return (
       <button
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          'inline-flex items-center justify-center border font-medium transition-all duration-150',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-2 focus:ring-offset-slate-950',
+          'inline-flex items-center justify-center border font-semibold transition-all duration-150',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
           'active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
           variantClasses[variant],
           sizeClasses[size],

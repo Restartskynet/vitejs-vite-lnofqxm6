@@ -13,28 +13,24 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const [useAccountEquity, setUseAccountEquity] = useState(true);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // Defensive: ensure data is a valid array
   const safeData = useMemo(() => {
     if (!Array.isArray(data)) return [];
-    return data.filter(d => d && typeof d.tradingEquity === 'number');
+    return data.filter((d) => d && typeof d.tradingEquity === 'number');
   }, [data]);
 
   const chartData = useMemo(() => {
-    // Guard against empty or invalid data
     if (!safeData || safeData.length === 0) return null;
 
-    const values = safeData.map(d => useAccountEquity ? (d.accountEquity ?? d.tradingEquity) : d.tradingEquity);
-    
-    // Guard against empty values array
+    const values = safeData.map((d) => (useAccountEquity ? (d.accountEquity ?? d.tradingEquity) : d.tradingEquity));
+
     if (values.length === 0) return null;
-    
+
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
     const range = maxVal - minVal || 1;
 
-    // Calculate drawdown
     let peak = values[0];
-    const drawdowns = values.map(v => {
+    const drawdowns = values.map((v) => {
       if (v > peak) peak = v;
       return peak > 0 ? ((peak - v) / peak) * 100 : 0;
     });
@@ -42,15 +38,14 @@ export function EquityChart({ data, className }: EquityChartProps) {
     return { values, minVal, maxVal, range, drawdowns };
   }, [safeData, useAccountEquity]);
 
-  // Empty state - show when no data or invalid data
   if (!chartData || safeData.length === 0) {
     return (
       <Card className={className}>
-        <div className="text-center py-12 text-slate-500">
-          <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <div className="text-center py-12 text-ink-muted">
+          <svg className="w-12 h-12 mx-auto mb-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
           </svg>
-          <p className="text-sm">Import trades to see your equity curve</p>
+          <p className="text-sm">Import trades to populate equity curve</p>
         </div>
       </Card>
     );
@@ -69,13 +64,14 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const startDateLabel = safeData[0]?.date ? formatDate(safeData[0].date) : '';
   const endDateLabel = safeData[safeData.length - 1]?.date ? formatDate(safeData[safeData.length - 1].date) : '';
 
-  // Guard against single-point series causing division by zero
   const pointCount = displayValues.length;
-  const points = displayValues.map((v, i) => {
-    const x = padding + (pointCount > 1 ? (i / (pointCount - 1)) : 0.5) * (width - 2 * padding);
-    const y = height - padding - ((v - displayMin) / displayRange) * (height - 2 * padding);
-    return `${x},${y}`;
-  }).join(' ');
+  const points = displayValues
+    .map((v, i) => {
+      const x = padding + (pointCount > 1 ? i / (pointCount - 1) : 0.5) * (width - 2 * padding);
+      const y = height - padding - ((v - displayMin) / displayRange) * (height - 2 * padding);
+      return `${x},${y}`;
+    })
+    .join(' ');
 
   const areaPath = `M${padding},${height - padding} L${points} L${width - padding},${height - padding} Z`;
 
@@ -89,15 +85,15 @@ export function EquityChart({ data, className }: EquityChartProps) {
     <Card className={className}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-white">Equity Curve</h3>
-          <p className="text-xs text-slate-500">{safeData.length} days</p>
+          <h3 className="text-lg font-semibold text-white">Equity & drawdown</h3>
+          <p className="text-xs text-ink-muted">{safeData.length} trading days</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowDrawdown(false)}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-              !showDrawdown ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40' : 'bg-white/5 text-slate-400 border border-white/10'
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+              !showDrawdown ? 'bg-sky-500/20 text-sky-300 border-sky-400/40' : 'bg-white/5 text-ink-muted border-white/10'
             )}
           >
             Equity
@@ -105,8 +101,8 @@ export function EquityChart({ data, className }: EquityChartProps) {
           <button
             onClick={() => setShowDrawdown(true)}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-              showDrawdown ? 'bg-red-500/20 text-red-400 border border-red-500/40' : 'bg-white/5 text-slate-400 border border-white/10'
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+              showDrawdown ? 'bg-red-500/20 text-red-300 border-red-400/40' : 'bg-white/5 text-ink-muted border-white/10'
             )}
           >
             Drawdown
@@ -114,13 +110,12 @@ export function EquityChart({ data, className }: EquityChartProps) {
         </div>
       </div>
 
-      {/* Toggle Account/Trading */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setUseAccountEquity(true)}
           className={cn(
             'px-2 py-1 rounded text-[10px] font-medium transition-all',
-            useAccountEquity ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'
+            useAccountEquity ? 'bg-white/10 text-white' : 'text-ink-muted hover:text-slate-200'
           )}
         >
           Account equity
@@ -129,29 +124,21 @@ export function EquityChart({ data, className }: EquityChartProps) {
           onClick={() => setUseAccountEquity(false)}
           className={cn(
             'px-2 py-1 rounded text-[10px] font-medium transition-all',
-            !useAccountEquity ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'
+            !useAccountEquity ? 'bg-white/10 text-white' : 'text-ink-muted hover:text-slate-200'
           )}
         >
           Trading equity
         </button>
-        <span className="text-[10px] text-slate-500 self-center">
+        <span className="text-[10px] text-ink-muted self-center">
           {useAccountEquity ? 'Includes adjustments' : 'Trades only'}
         </span>
       </div>
 
-      {/* Chart */}
-      <div 
-        className="relative h-32 mb-4"
-        onMouseLeave={() => setHoveredIndex(null)}
-      >
-        <div className="absolute left-0 top-0 text-[10px] text-slate-500">
-          {axisMaxLabel}
-        </div>
-        <div className="absolute left-0 bottom-0 text-[10px] text-slate-500">
-          {axisMinLabel}
-        </div>
-        <svg 
-          viewBox={`0 0 ${width} ${height}`} 
+      <div className="relative h-32 mb-4" onMouseLeave={() => setHoveredIndex(null)}>
+        <div className="absolute left-0 top-0 text-[10px] text-ink-muted">{axisMaxLabel}</div>
+        <div className="absolute left-0 bottom-0 text-[10px] text-ink-muted">{axisMinLabel}</div>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
           className="w-full h-full"
           preserveAspectRatio="none"
           onMouseMove={(e) => {
@@ -167,16 +154,10 @@ export function EquityChart({ data, className }: EquityChartProps) {
               <stop offset="100%" stopColor={showDrawdown ? '#ef4444' : isPositive ? '#10b981' : '#ef4444'} stopOpacity="0" />
             </linearGradient>
           </defs>
-          
-          <path d={areaPath} fill={`url(#gradient-${showDrawdown ? 'dd' : 'eq'})`} />
-          <polyline
-            points={points}
-            fill="none"
-            stroke={showDrawdown ? '#ef4444' : isPositive ? '#10b981' : '#ef4444'}
-            strokeWidth="0.5"
-          />
 
-          {/* Hover line */}
+          <path d={areaPath} fill={`url(#gradient-${showDrawdown ? 'dd' : 'eq'})`} />
+          <polyline points={points} fill="none" stroke={showDrawdown ? '#ef4444' : isPositive ? '#10b981' : '#ef4444'} strokeWidth="0.5" />
+
           {hoveredIndex !== null && pointCount > 1 && (
             <>
               <line
@@ -198,44 +179,38 @@ export function EquityChart({ data, className }: EquityChartProps) {
           )}
         </svg>
 
-        {/* Tooltip */}
         {hoveredIndex !== null && safeData[hoveredIndex] && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 rounded-lg bg-slate-800 border border-white/10 text-xs z-10">
-            <p className="text-slate-400">{safeData[hoveredIndex].date}</p>
+            <p className="text-ink-muted">{safeData[hoveredIndex].date}</p>
             <p className="text-white font-medium">
-              {showDrawdown 
-                ? `-${chartData.drawdowns[hoveredIndex].toFixed(2)}%`
-                : formatMoney(chartData.values[hoveredIndex])
-              }
+              {showDrawdown ? `-${chartData.drawdowns[hoveredIndex].toFixed(2)}%` : formatMoney(chartData.values[hoveredIndex])}
             </p>
             {safeData[hoveredIndex].dayPnL !== undefined && (
-              <p className={cn(
-                'text-xs',
-                safeData[hoveredIndex].dayPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
-              )}>
-                Day: {safeData[hoveredIndex].dayPnL >= 0 ? '+' : ''}{formatMoney(safeData[hoveredIndex].dayPnL)}
+              <p className={cn('text-xs', safeData[hoveredIndex].dayPnL >= 0 ? 'text-emerald-300' : 'text-red-300')}>
+                Day: {safeData[hoveredIndex].dayPnL >= 0 ? '+' : ''}
+                {formatMoney(safeData[hoveredIndex].dayPnL)}
               </p>
             )}
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between text-[10px] text-slate-500 mb-4">
+      <div className="flex items-center justify-between text-[10px] text-ink-muted mb-4">
         <span>{startDateLabel}</span>
         <span>{endDateLabel}</span>
       </div>
 
-      {/* Footer stats */}
       <div className="flex items-center justify-between text-xs">
         <div>
-          <span className="text-slate-500">Start:</span>
+          <span className="text-ink-muted">Start:</span>
           <span className="text-white ml-1">{formatMoney(startValue)}</span>
         </div>
-        <div className={cn('font-medium', isPositive ? 'text-emerald-400' : 'text-red-400')}>
-          {isPositive ? '+' : ''}{formatMoney(change)} ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
+        <div className={cn('font-medium', isPositive ? 'text-emerald-300' : 'text-red-300')}>
+          {isPositive ? '+' : ''}
+          {formatMoney(change)} ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
         </div>
         <div>
-          <span className="text-slate-500">End:</span>
+          <span className="text-ink-muted">End:</span>
           <span className="text-white ml-1">{formatMoney(endValue)}</span>
         </div>
       </div>

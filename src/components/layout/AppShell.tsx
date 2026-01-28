@@ -6,16 +6,19 @@ import { cn } from '../../lib/utils';
 export function AppShell({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <div className="fixed inset-0 bg-gradient-to-br from-blue-950/30 via-transparent to-purple-950/20 pointer-events-none" />
+      <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.12),_transparent_45%),radial-gradient(circle_at_30%_20%,_rgba(56,189,248,0.12),_transparent_45%),radial-gradient(circle_at_80%_0%,_rgba(16,185,129,0.1),_transparent_40%)] pointer-events-none" />
       <Header />
       <main className={cn('max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative pb-24 sm:pb-8', className)}>
         {children}
       </main>
       <footer className="border-t border-white/[0.06] mt-12 py-6 hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-500">
-            <p>Restart Risk Strategy Dashboard • Deterministic position management</p>
-            <p>Local-first • Your data never leaves your device</p>
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 text-sm text-ink-muted">
+            <div>
+              <p className="text-white font-semibold">Restart’s Trading Co-Pilot</p>
+              <p className="text-xs text-ink-muted">Local-first • Deterministic • Audit-ready</p>
+            </div>
+            <p className="text-xs text-ink-muted">Restart’s Trading Co-Pilot is a rule-enforcement tool. Not financial advice.</p>
           </div>
         </div>
       </footer>
@@ -32,7 +35,7 @@ export function Page({ title, subtitle, action, children, className }: { title?:
           {title && (
             <div>
               <h1 className="text-2xl font-bold text-white">{title}</h1>
-              {subtitle && <p className="text-sm text-slate-400 mt-1">{subtitle}</p>}
+              {subtitle && <p className="text-sm text-ink-muted mt-1">{subtitle}</p>}
             </div>
           )}
           {action}
@@ -51,7 +54,7 @@ export function Section({ title, subtitle, action, children, className }: { titl
           {title && (
             <div>
               <h2 className="text-lg font-semibold text-white">{title}</h2>
-              {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+              {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
             </div>
           )}
           {action}

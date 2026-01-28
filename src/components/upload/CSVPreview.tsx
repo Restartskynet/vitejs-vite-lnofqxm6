@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { CSVPreviewExtended } from '../../engine/types';
-import { Card, Badge, Button } from '../ui';
+import { Card, Badge } from '../ui';
 import { cn } from '../../lib/utils';
 
 interface CSVPreviewProps {
@@ -19,24 +19,18 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // FIX: Safe fallback for allRows (use rows if allRows is not available)
   const allRows = useMemo(() => {
     return preview.allRows ?? preview.rows ?? [];
   }, [preview.allRows, preview.rows]);
 
-  // Filter and sort rows
   const processedRows = useMemo(() => {
     let rows = [...allRows];
-    
-    // Search filter (search in all columns)
+
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      rows = rows.filter(row => 
-        row.some(cell => cell.toLowerCase().includes(term))
-      );
+      rows = rows.filter((row) => row.some((cell) => cell.toLowerCase().includes(term)));
     }
-    
-    // Sort
+
     if (sortColumn !== null) {
       rows.sort((a, b) => {
         const aVal = a[sortColumn] || '';
@@ -45,7 +39,7 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
         return sortDirection === 'asc' ? comparison : -comparison;
       });
     }
-    
+
     return rows;
   }, [allRows, searchTerm, sortColumn, sortDirection]);
 
@@ -56,7 +50,7 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
 
   const handleSort = (colIdx: number) => {
     if (sortColumn === colIdx) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortColumn(colIdx);
       setSortDirection('asc');
@@ -65,88 +59,77 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
 
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize);
-    setPage(0); // Reset to first page
+    setPage(0);
   };
 
-  // FIX: Safe fallback for detectedFormat
   const detectedFormat = preview.detectedFormat ?? 'unknown';
   const formatConfidence = preview.formatConfidence ?? 'low';
-  
-  // Format badge style
-  const formatBadgeVariant = detectedFormat === 'orders-records' ? 'info' : 
-                             detectedFormat === 'orders-fills' ? 'success' : 'warning';
+
+  const formatBadgeVariant =
+    detectedFormat === 'orders-records' ? 'info' : detectedFormat === 'orders-fills' ? 'success' : 'warning';
 
   return (
     <Card className={className}>
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <h3 className="text-lg font-semibold text-white">CSV Preview</h3>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-xs text-slate-500">
-              {processedRows.length.toLocaleString()} rows
-            </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <p className="text-xs text-ink-muted">{processedRows.length.toLocaleString()} rows</p>
             <Badge variant={formatBadgeVariant} size="sm">
-              {detectedFormat === 'orders-records' ? 'Orders Records Format' :
-               detectedFormat === 'orders-fills' ? 'Orders/Fills Format' : 'Unknown Format'}
+              {detectedFormat === 'orders-records'
+                ? 'Orders Records Format'
+                : detectedFormat === 'orders-fills'
+                  ? 'Orders/Fills Format'
+                  : 'Unknown Format'}
             </Badge>
-            {formatConfidence && (
-              <span className="text-[10px] text-slate-600">({formatConfidence} confidence)</span>
-            )}
-            <Badge 
-              variant={preview.hasRequiredColumns ? 'success' : 'danger'} 
-              size="sm"
-            >
+            {formatConfidence && <span className="text-[10px] text-ink-muted">({formatConfidence} confidence)</span>}
+            <Badge variant={preview.hasRequiredColumns ? 'success' : 'danger'} size="sm">
               {preview.hasRequiredColumns ? 'Valid' : 'Missing Columns'}
             </Badge>
           </div>
         </div>
-        
-        {/* Search */}
+
         <div className="relative">
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(0);
+            }}
             placeholder="Search..."
-            className="w-full sm:w-48 px-3 py-1.5 pl-8 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50"
+            className="w-full sm:w-48 px-3 py-1.5 pl-8 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-ink-subtle focus:outline-none focus:border-sky-500/50"
           />
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
         </div>
       </div>
-      
-      {/* Missing columns warning */}
+
       {!preview.hasRequiredColumns && (
         <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-          <p className="text-sm text-red-400 font-medium">Missing required columns:</p>
-          <p className="text-xs text-red-400/80 mt-1">{preview.missingColumns.join(', ')}</p>
+          <p className="text-sm text-red-300 font-medium">Missing required columns:</p>
+          <p className="text-xs text-red-300/80 mt-1">{preview.missingColumns.join(', ')}</p>
         </div>
       )}
-      
-      {/* Table */}
+
       <div className="overflow-x-auto -mx-5">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/10">
-              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-12">
-                #
-              </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider w-12">#</th>
               {preview.headers.map((header, i) => (
-                <th 
-                  key={i} 
+                <th
+                  key={i}
                   onClick={() => handleSort(i)}
                   className={cn(
                     'px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-white transition-colors',
-                    sortColumn === i ? 'text-blue-400' : 'text-slate-500'
+                    sortColumn === i ? 'text-sky-300' : 'text-ink-muted'
                   )}
                 >
                   <div className="flex items-center gap-1">
                     {header}
-                    {sortColumn === i && (
-                      <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    )}
+                    {sortColumn === i && <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>}
                   </div>
                 </th>
               ))}
@@ -154,20 +137,11 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
           </thead>
           <tbody>
             {currentRows.map((row, rowIdx) => (
-              <tr 
-                key={startIdx + rowIdx} 
-                className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
-              >
-                <td className="px-4 py-2 text-slate-600 tabular-nums">
-                  {startIdx + rowIdx + 1}
-                </td>
+              <tr key={startIdx + rowIdx} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                <td className="px-4 py-2 text-ink-subtle tabular-nums">{startIdx + rowIdx + 1}</td>
                 {row.map((cell, cellIdx) => (
-                  <td 
-                    key={cellIdx} 
-                    className="px-4 py-2 text-slate-300 whitespace-nowrap max-w-[200px] truncate"
-                    title={cell}
-                  >
-                    {cell || <span className="text-slate-600 italic">empty</span>}
+                  <td key={cellIdx} className="px-4 py-2 text-slate-300 whitespace-nowrap max-w-[200px] truncate" title={cell}>
+                    {cell || <span className="text-ink-subtle italic">empty</span>}
                   </td>
                 ))}
               </tr>
@@ -175,35 +149,32 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
           </tbody>
         </table>
       </div>
-      
-      {/* Empty state */}
+
       {currentRows.length === 0 && (
-        <div className="py-8 text-center text-slate-500">
+        <div className="py-8 text-center text-ink-muted">
           {searchTerm ? `No rows matching "${searchTerm}"` : 'No data to display'}
         </div>
       )}
-      
-      {/* Pagination */}
+
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-white/10">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Rows per page:</span>
+          <span className="text-xs text-ink-muted">Rows per page:</span>
           <select
             value={pageSize}
             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-            className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500/50"
+            className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-sky-500/50"
           >
-            {PAGE_SIZES.map(size => (
-              <option key={size} value={size}>{size}</option>
+            {PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
             ))}
           </select>
         </div>
-        
+
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">
-            {processedRows.length > 0 
-              ? `${startIdx + 1}-${endIdx} of ${processedRows.length}` 
-              : '0 rows'
-            }
+          <span className="text-xs text-ink-muted">
+            {processedRows.length > 0 ? `${startIdx + 1}-${endIdx} of ${processedRows.length}` : '0 rows'}
           </span>
           <div className="flex gap-1">
             <button
@@ -211,25 +182,25 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
               disabled={page === 0}
               className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
               </svg>
             </button>
             <button
-              onClick={() => setPage(p => p - 1)}
+              onClick={() => setPage((p) => p - 1)}
               disabled={page === 0}
               className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
               </svg>
             </button>
             <button
-              onClick={() => setPage(p => p + 1)}
+              onClick={() => setPage((p) => p + 1)}
               disabled={page >= totalPages - 1}
               className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
             </button>
@@ -238,7 +209,7 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
               disabled={page >= totalPages - 1}
               className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" />
               </svg>
             </button>

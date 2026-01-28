@@ -2,9 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Optional sane defaults */
 :root {
   color-scheme: dark;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html,
@@ -14,4 +17,24 @@ body {
 
 body {
   margin: 0;
+  background-color: #0a0b0f;
+  color: #e7edf5;
+}
+
+* {
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
 }

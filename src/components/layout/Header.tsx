@@ -4,8 +4,8 @@ import { Badge } from '../ui';
 import { formatPercent } from '../../lib/utils';
 
 const LogoIcon = () => (
-  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+  <svg className="w-5 h-5 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m0 0l4-4m-4 4l-4-4m9-7.5h.01M6.25 6.5h.01" />
   </svg>
 );
 
@@ -17,12 +17,12 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-300 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
               <LogoIcon />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Restart Risk</h1>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider hidden sm:block">Strategy Dashboard</p>
+              <h1 className="text-xl font-bold text-white tracking-tight">Restart’s Trading Co-Pilot</h1>
+              <p className="text-[10px] text-ink-muted uppercase tracking-wider hidden sm:block">Offline risk command center</p>
             </div>
           </div>
 

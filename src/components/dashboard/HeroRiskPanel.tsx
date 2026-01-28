@@ -26,7 +26,7 @@ export function HeroRiskPanel({ className }: { className?: string }) {
   const isHigh = currentRisk.mode === 'HIGH';
 
   return (
-    <Card glow={hasData ? (isHigh ? 'success' : 'warning') : 'none'} noPadding className={className}>
+    <Card glow={hasData ? (isHigh ? 'high' : 'low') : 'none'} noPadding className={className}>
       <div className="relative overflow-hidden p-6 sm:p-8">
         {hasData && (
           <div className={cn('absolute inset-0 opacity-30 pointer-events-none', isHigh ? 'bg-gradient-to-br from-emerald-600/30 via-transparent to-transparent' : 'bg-gradient-to-br from-amber-600/30 via-transparent to-transparent')} />
