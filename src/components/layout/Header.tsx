@@ -1,7 +1,7 @@
 import { useDashboardState } from '../../stores/dashboardStore';
 import { Navigation } from './Navigation';
 import { Badge } from '../ui';
-import { formatPercent } from '../../lib/utils';
+import { formatPercent, formatDateTime } from '../../lib/utils';
 
 const LogoIcon = () => (
   <svg className="w-5 h-5 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -10,7 +10,8 @@ const LogoIcon = () => (
 );
 
 export function Header() {
-  const { hasData, currentRisk } = useDashboardState();
+  const { hasData, currentRisk, importHistory } = useDashboardState();
+  const latestImport = importHistory[0];
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-slate-950/90 backdrop-blur-xl">
@@ -28,6 +29,15 @@ export function Header() {
 
           <div className="hidden sm:flex items-center gap-4">
             <Navigation showLabels={false} />
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/[0.03] text-[10px] uppercase tracking-[0.2em] text-ink-muted">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 motion-safe:animate-pulse" />
+              Saved locally
+            </div>
+            {latestImport && (
+              <span className="text-[10px] text-ink-muted">
+                Last import {formatDateTime(latestImport.importedAt)}
+              </span>
+            )}
             {hasData && (
               <div className="flex items-center gap-3 pl-4 border-l border-white/[0.08]">
                 <Badge variant={currentRisk.mode === 'HIGH' ? 'high' : 'low'} size="md" pulse>

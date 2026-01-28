@@ -25,6 +25,21 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
 
   const detectedFormat = result.detectedFormat ?? 'unknown';
 
+  const skippedReasonCounts = skippedRows.reduce<Record<string, number>>((acc, row) => {
+    const reasons = row.reasons && row.reasons.length > 0 ? row.reasons : ['Unspecified reason'];
+    reasons.forEach((reason) => {
+      acc[reason] = (acc[reason] ?? 0) + 1;
+    });
+    return acc;
+  }, {});
+
+  const topSkippedReason = Object.entries(skippedReasonCounts)
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  const skippedSummary = hasSkipped
+    ? `${skippedRows.length} rows skipped${topSkippedReason ? `: ${topSkippedReason}` : ''}`
+    : 'No rows skipped';
+
   const handleDownloadReport = () => {
     const tradeResult = buildTrades(result.fills, 0, result.pendingOrders ?? []);
     const report = {
@@ -92,6 +107,17 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
           <p className="text-[10px] text-ink-muted uppercase tracking-wider">Symbols</p>
           <p className="text-xl font-bold text-white">{result.stats.symbols.length}</p>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-xs text-ink-muted">
+        <p className="text-white font-semibold text-sm mb-1">Diagnostics</p>
+        <p>{skippedSummary}</p>
+        {Object.keys(skippedReasonCounts).length > 1 && (
+          <p className="mt-1 text-[10px] text-ink-muted">
+            Reasons tracked: {Object.keys(skippedReasonCounts).slice(0, 3).join(', ')}
+            {Object.keys(skippedReasonCounts).length > 3 ? '…' : ''}
+          </p>
+        )}
       </div>
 
       {result.stats.dateRange && (

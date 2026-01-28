@@ -6,7 +6,11 @@ import { cn } from '../../lib/utils';
 export function AppShell({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.12),_transparent_45%),radial-gradient(circle_at_30%_20%,_rgba(56,189,248,0.12),_transparent_45%),radial-gradient(circle_at_80%_0%,_rgba(16,185,129,0.1),_transparent_40%)] pointer-events-none" />
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.18),_transparent_45%),radial-gradient(circle_at_25%_20%,_rgba(56,189,248,0.12),_transparent_40%),radial-gradient(circle_at_80%_0%,_rgba(16,185,129,0.12),_transparent_40%)] opacity-90" />
+        <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl ambient-orbit" />
+        <div className="absolute -bottom-40 -left-40 h-[30rem] w-[30rem] rounded-full bg-emerald-500/10 blur-3xl ambient-orbit" />
+      </div>
       <Header />
       <main className={cn('max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative pb-24 sm:pb-8', className)}>
         {children}
@@ -29,7 +33,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
 
 export function Page({ title, subtitle, action, children, className }: { title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={cn('space-y-6', className)}>
+    <div className={cn('space-y-6 motion-safe:animate-fade-in', className)}>
       {(title || action) && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {title && (

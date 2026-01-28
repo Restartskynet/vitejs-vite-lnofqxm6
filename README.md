@@ -1,6 +1,6 @@
-# Restart Risk — Developer Docs
+# Restart’s Trading Co-Pilot — Developer Docs
 
-Restart Risk is an offline-first strategy dashboard focused on **risk mode**, **position sizing**, and **active trade visibility**. It ingests broker export data (currently **Webull Orders Records CSV**) and reconstructs fills → trades → derived equity/risk so the UI can answer, at a glance:
+Restart’s Trading Co-Pilot is an offline-first strategy dashboard focused on **risk mode**, **position sizing**, and **active trade visibility**. It ingests broker export data (currently **Webull Orders Records CSV**) and reconstructs fills → trades → derived equity/risk so the UI can answer, at a glance:
 
 - **What is today’s risk?**
 - **What mode am I in (LOW/HIGH) and what will change it?**

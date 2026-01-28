@@ -77,7 +77,7 @@ export function UploadZone({ onFileSelect, isLoading = false, accept = '.csv', c
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-200',
+        'relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
         isDragging
           ? 'border-sky-400 bg-sky-500/10 scale-[1.01]'
           : 'border-white/15 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04]',
@@ -89,14 +89,25 @@ export function UploadZone({ onFileSelect, isLoading = false, accept = '.csv', c
 
       {isLoading ? (
         <>
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center">
-            <svg className="w-8 h-8 text-sky-300 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
+          <div className="relative w-full max-w-md mx-auto mb-5 rounded-2xl border border-sky-500/40 bg-sky-500/10 overflow-hidden">
+            <div className="absolute inset-0 bg-[linear-gradient(120deg,_transparent,_rgba(56,189,248,0.25),_transparent)] scan-sweep" />
+            <div className="relative grid grid-cols-3 gap-3 px-4 py-4 text-xs text-sky-200/80">
+              <div>
+                <p className="uppercase tracking-[0.2em] text-[9px] text-sky-200/60">Stage</p>
+                <p className="text-sm font-semibold text-sky-100">Scanning</p>
+              </div>
+              <div>
+                <p className="uppercase tracking-[0.2em] text-[9px] text-sky-200/60">Step</p>
+                <p className="text-sm font-semibold text-sky-100">Validate rows</p>
+              </div>
+              <div>
+                <p className="uppercase tracking-[0.2em] text-[9px] text-sky-200/60">Output</p>
+                <p className="text-sm font-semibold text-sky-100">Audit log</p>
+              </div>
+            </div>
           </div>
-          <p className="text-lg font-semibold text-white">Processing import...</p>
-          <p className="text-sm text-ink-muted mt-1">Validating rows and preparing audit trail.</p>
+          <p className="text-lg font-semibold text-white">Scanning & validating...</p>
+          <p className="text-sm text-ink-muted mt-1">Deterministic checks running locally on this device.</p>
         </>
       ) : (
         <>

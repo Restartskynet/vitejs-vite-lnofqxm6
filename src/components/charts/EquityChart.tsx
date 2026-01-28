@@ -63,6 +63,8 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const axisMinLabel = showDrawdown ? `-${displayMax.toFixed(1)}%` : formatMoney(displayMin);
   const startDateLabel = safeData[0]?.date ? formatDate(safeData[0].date) : '';
   const endDateLabel = safeData[safeData.length - 1]?.date ? formatDate(safeData[safeData.length - 1].date) : '';
+  const yAxisLabel = showDrawdown ? 'Drawdown %' : 'Equity ($)';
+  const xAxisLabel = 'Date';
 
   const pointCount = displayValues.length;
   const points = displayValues
@@ -91,6 +93,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
         <div className="flex gap-2">
           <button
             onClick={() => setShowDrawdown(false)}
+            aria-pressed={!showDrawdown}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
               !showDrawdown ? 'bg-sky-500/20 text-sky-300 border-sky-400/40' : 'bg-white/5 text-ink-muted border-white/10'
@@ -100,6 +103,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
           </button>
           <button
             onClick={() => setShowDrawdown(true)}
+            aria-pressed={showDrawdown}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
               showDrawdown ? 'bg-red-500/20 text-red-300 border-red-400/40' : 'bg-white/5 text-ink-muted border-white/10'
@@ -113,6 +117,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setUseAccountEquity(true)}
+          aria-pressed={useAccountEquity}
           className={cn(
             'px-2 py-1 rounded text-[10px] font-medium transition-all',
             useAccountEquity ? 'bg-white/10 text-white' : 'text-ink-muted hover:text-slate-200'
@@ -122,6 +127,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
         </button>
         <button
           onClick={() => setUseAccountEquity(false)}
+          aria-pressed={!useAccountEquity}
           className={cn(
             'px-2 py-1 rounded text-[10px] font-medium transition-all',
             !useAccountEquity ? 'bg-white/10 text-white' : 'text-ink-muted hover:text-slate-200'
@@ -137,6 +143,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
       <div className="relative h-32 mb-4" onMouseLeave={() => setHoveredIndex(null)}>
         <div className="absolute left-0 top-0 text-[10px] text-ink-muted">{axisMaxLabel}</div>
         <div className="absolute left-0 bottom-0 text-[10px] text-ink-muted">{axisMinLabel}</div>
+        <div className="absolute right-0 top-0 text-[10px] text-ink-muted">{yAxisLabel}</div>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-full"
@@ -195,9 +202,14 @@ export function EquityChart({ data, className }: EquityChartProps) {
         )}
       </div>
 
-      <div className="flex items-center justify-between text-[10px] text-ink-muted mb-4">
+      <div className="flex items-center justify-between text-[10px] text-ink-muted mb-2">
         <span>{startDateLabel}</span>
         <span>{endDateLabel}</span>
+      </div>
+
+      <div className="flex items-center justify-between text-[10px] text-ink-muted mb-4">
+        <span>Y: {yAxisLabel}</span>
+        <span>X: {xAxisLabel}</span>
       </div>
 
       <div className="flex items-center justify-between text-xs">
