@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { ImportResultExtended, SkippedRow } from '../../engine/types';
+import type { ImportResultExtended } from '../../engine/types';
+import { buildTrades } from '../../engine/tradesBuilder';
 import { Card, Badge, Button } from '../ui';
 import { formatDate } from '../../lib/utils';
 
@@ -26,6 +27,32 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
   
   // FIX: Safe fallback for detectedFormat
   const detectedFormat = result.detectedFormat ?? 'unknown';
+
+  const handleDownloadReport = () => {
+    const tradeResult = buildTrades(result.fills, 0, result.pendingOrders ?? []);
+    const report = {
+      generatedAt: new Date().toISOString(),
+      detectedFormat,
+      stats: result.stats,
+      parsedFills: result.fills.length,
+      constructedTrades: tradeResult.trades.length,
+      skippedRows: skippedRows.map(row => ({
+        rowIndex: row.rowIndex,
+        reasons: row.reasons,
+        rawData: row.rawData,
+      })),
+      warnings: result.warnings,
+      errors: result.errors,
+      pendingOrders: pendingOrders,
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `import-report-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   
   return (
     <Card className={className}>
@@ -175,7 +202,10 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
       )}
       
       {/* Actions */}
-      <div className="flex gap-3 pt-4 border-t border-white/10">
+      <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/10">
+        <Button variant="secondary" onClick={handleDownloadReport} disabled={isProcessing}>
+          Download Import Report
+        </Button>
         <Button variant="secondary" onClick={onCancel} disabled={isProcessing}>
           Cancel
         </Button>

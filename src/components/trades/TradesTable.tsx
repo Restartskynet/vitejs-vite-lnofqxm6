@@ -17,7 +17,7 @@ export function TradesTable({ trades, className }: TradesTableProps) {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showOpen, setShowOpen] = useState(true);
+  const [showActive, setShowActive] = useState(true);
   const [showClosed, setShowClosed] = useState(true);
 
   // Filter and sort trades
@@ -33,7 +33,7 @@ export function TradesTable({ trades, className }: TradesTableProps) {
     }
     
     // Filter by status
-    if (!showOpen) result = result.filter(t => t.status !== 'OPEN');
+    if (!showActive) result = result.filter(t => t.status !== 'ACTIVE');
     if (!showClosed) result = result.filter(t => t.status !== 'CLOSED');
     
     // Sort
@@ -62,7 +62,7 @@ export function TradesTable({ trades, className }: TradesTableProps) {
     });
     
     return result;
-  }, [trades, search, sortField, sortDirection, showOpen, showClosed]);
+  }, [trades, search, sortField, sortDirection, showActive, showClosed]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -86,7 +86,7 @@ export function TradesTable({ trades, className }: TradesTableProps) {
     
     return {
       total: filteredTrades.length,
-      open: filteredTrades.filter(t => t.status === 'OPEN').length,
+      open: filteredTrades.filter(t => t.status === 'ACTIVE').length,
       closed: closed.length,
       wins: wins.length,
       losses: losses.length,
@@ -127,15 +127,15 @@ export function TradesTable({ trades, className }: TradesTableProps) {
             
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setShowOpen(!showOpen)}
+                onClick={() => setShowActive(!showActive)}
                 className={cn(
                   'px-2 py-1 text-xs rounded-lg border transition-all',
-                  showOpen 
-                    ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' 
+                  showActive 
+                    ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' 
                     : 'bg-transparent border-white/10 text-slate-500'
                 )}
               >
-                Open
+                Active
               </button>
               <button
                 onClick={() => setShowClosed(!showClosed)}

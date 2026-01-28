@@ -32,11 +32,13 @@ export interface Fill {
   orderId: string;
   commission: number;
   marketDate: string; // YYYY-MM-DD in ET
+  rowIndex: number;
+  stopPrice?: number | null;
 }
 /**
  * Trade status
  */
-export type TradeStatus = 'OPEN' | 'CLOSED';
+export type TradeStatus = 'ACTIVE' | 'CLOSED';
 
 /**
  * Trade outcome for closed trades only
@@ -78,7 +80,7 @@ export interface Trade {
   stopPrice: number | null;
   
   // Classification
-  outcome: ClosedTradeOutcome | 'OPEN';
+  outcome: ClosedTradeOutcome | 'ACTIVE';
   
   // Metadata
   marketDate: string;
@@ -204,7 +206,9 @@ export interface ImportResultExtended extends ImportResult {
 export interface PendingOrder {
   symbol: string;
   side: 'BUY' | 'SELL';
-  price: number;
+  price: number | null;
+  stopPrice: number | null;
+  limitPrice: number | null;
   quantity: number;
   placedTime: Date;
   type: 'STOP' | 'LIMIT' | 'MARKET' | 'UNKNOWN';
@@ -215,7 +219,7 @@ export interface PendingOrder {
  */
 export interface RiskStateSnapshot {
   tradeId: string;
-  tradeOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | 'OPEN';
+  tradeOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN' | 'ACTIVE';
   tradePnL: number;
   modeBefore: 'HIGH' | 'LOW';
   modeAfter: 'HIGH' | 'LOW';
@@ -236,5 +240,5 @@ export interface TradeWithRisk extends Trade {
   riskDollarsAtEntry: number;
   inferredStop: number | null;
   pendingExit: number | null;
-  stopSource: 'user' | 'inferred' | 'none';
+  stopSource: 'user' | 'none';
 }

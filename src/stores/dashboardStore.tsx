@@ -219,8 +219,12 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           }
         }
         
-        // Sort by date
-        mergedFills.sort((a, b) => a.filledTime.getTime() - b.filledTime.getTime());
+        // Sort by date with stable row order
+        mergedFills.sort((a, b) => {
+          const timeDiff = a.filledTime.getTime() - b.filledTime.getTime();
+          if (timeDiff !== 0) return timeDiff;
+          return (a.rowIndex ?? 0) - (b.rowIndex ?? 0);
+        });
       }
       
       // Recompute derived data with adjustments
@@ -327,6 +331,8 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
         const fills = data.fills.map(pf => ({
           ...pf,
           filledTime: new Date(pf.filledTime),
+          rowIndex: pf.rowIndex ?? 0,
+          stopPrice: pf.stopPrice ?? null,
         }));
         
         const derived = recomputeDerivedData(
@@ -358,11 +364,15 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           .map(pf => ({
             ...pf,
             filledTime: new Date(pf.filledTime),
+            rowIndex: pf.rowIndex ?? 0,
+            stopPrice: pf.stopPrice ?? null,
           }));
         
-        const mergedFills = [...state.fills, ...newFills].sort(
-          (a, b) => a.filledTime.getTime() - b.filledTime.getTime()
-        );
+        const mergedFills = [...state.fills, ...newFills].sort((a, b) => {
+          const timeDiff = a.filledTime.getTime() - b.filledTime.getTime();
+          if (timeDiff !== 0) return timeDiff;
+          return (a.rowIndex ?? 0) - (b.rowIndex ?? 0);
+        });
         
         // Merge fingerprints
         const mergedFps = new Set(state.fillFingerprints);
@@ -412,6 +422,8 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       const hydratedFills = fills.map(f => ({
         ...f,
         filledTime: new Date(f.filledTime),
+        rowIndex: f.rowIndex ?? 0,
+        stopPrice: f.stopPrice ?? null,
       }));
       
       const hydratedStrategy = strategy || state.strategy;
@@ -509,6 +521,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 orderId: pf.orderId,
                 commission: pf.commission,
                 marketDate: pf.marketDate,
+                rowIndex: pf.rowIndex ?? 0,
+                stopPrice: pf.stopPrice ?? null,
               })),
               fingerprints: data.fillFingerprints,
               settings: data.settings,
@@ -547,6 +561,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           orderId: f.orderId,
           commission: f.commission,
           marketDate: f.marketDate,
+          rowIndex: f.rowIndex,
+          stopPrice: f.stopPrice ?? null,
         }));
 
         const dataToSave: PersistedData & { strategy?: StrategyConfig } = {

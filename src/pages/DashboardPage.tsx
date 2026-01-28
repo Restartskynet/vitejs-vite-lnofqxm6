@@ -2,7 +2,7 @@ import { useDashboard } from '../stores/dashboardStore';
 import { Page, Section } from '../components/layout';
 import { Card, Badge, Button } from '../components/ui';
 import { EquityChart } from '../components/charts';
-import { formatMoney, formatPercent, cn } from '../lib/utils';
+import { formatMoney, formatPercent, formatDateTime, cn } from '../lib/utils';
 
 // KPI Card component
 function KPICard({ 
@@ -29,10 +29,15 @@ function KPICard({
 
 export function DashboardPage() {
   const { state } = useDashboard();
-  const { currentRisk, metrics, dailyEquity, hasData, isLoading, trades, strategy, adjustments } = state;
+  const { currentRisk, metrics, dailyEquity, hasData, isLoading, trades, strategy } = state;
+  const activeTrades = trades.filter(trade => trade.status === 'ACTIVE');
 
-  // Calculate adjustment totals
-  const totalAdjustments = adjustments.reduce((sum, adj) => sum + adj.amount, 0);
+  const winsToHigh = currentRisk.mode === 'LOW'
+    ? Math.max(strategy.winsToRecover - currentRisk.lowWinsProgress, 0)
+    : 0;
+  const lossesToLow = currentRisk.mode === 'HIGH'
+    ? Math.max(strategy.lossesToDrop, 0)
+    : 0;
 
   if (isLoading) {
     return (
@@ -50,15 +55,16 @@ export function DashboardPage() {
       <Section className="mb-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Risk Card */}
-          <Card className="lg:col-span-2">
-            <div className="flex flex-col h-full">
+          <Card className="lg:col-span-2 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-transparent to-emerald-500/10 pointer-events-none" />
+            <div className="relative flex flex-col h-full">
               {hasData ? (
                 <>
                   {/* Risk Mode Header */}
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
                       <div className={cn(
-                        'w-12 h-12 rounded-xl flex items-center justify-center',
+                        'w-14 h-14 rounded-2xl flex items-center justify-center',
                         currentRisk.mode === 'HIGH' 
                           ? 'bg-emerald-500/20 border border-emerald-500/40'
                           : 'bg-amber-500/20 border border-amber-500/40'
@@ -90,24 +96,24 @@ export function DashboardPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-4xl font-bold text-white" style={{ fontFeatureSettings: '"tnum"' }}>
+                      <p className="text-xs uppercase tracking-wider text-slate-500">Today's Risk</p>
+                      <p className="text-5xl sm:text-6xl font-black text-white tracking-tight" style={{ fontFeatureSettings: '"tnum"' }}>
                         {formatPercent(currentRisk.todayRiskPct)}
                       </p>
-                      <p className="text-xs text-slate-500">Today's Risk</p>
                     </div>
                   </div>
 
                   {/* Risk Details */}
                   <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
                       <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Allowed Risk</p>
-                      <p className="text-xl font-bold text-white" style={{ fontFeatureSettings: '"tnum"' }}>
+                      <p className="text-2xl font-bold text-white" style={{ fontFeatureSettings: '"tnum"' }}>
                         {formatMoney(currentRisk.allowedRiskDollars)}
                       </p>
                     </div>
-                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
                       <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Current Equity</p>
-                      <p className="text-xl font-bold text-white" style={{ fontFeatureSettings: '"tnum"' }}>
+                      <p className="text-2xl font-bold text-white" style={{ fontFeatureSettings: '"tnum"' }}>
                         {formatMoney(currentRisk.equity)}
                       </p>
                     </div>
@@ -118,15 +124,15 @@ export function DashboardPage() {
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Forecast</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                        <p className="text-[10px] text-emerald-400/80 uppercase">If Win</p>
+                        <p className="text-[10px] text-emerald-400/80 uppercase">Forecast</p>
                         <p className="text-sm font-semibold text-emerald-400">
-                          {currentRisk.forecast.ifWin.mode} @ {formatPercent(currentRisk.forecast.ifWin.riskPct)}
+                          In {winsToHigh} wins → {currentRisk.forecast.ifWin.mode} @ {formatPercent(currentRisk.forecast.ifWin.riskPct)}
                         </p>
                       </div>
                       <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                        <p className="text-[10px] text-red-400/80 uppercase">If Loss</p>
+                        <p className="text-[10px] text-red-400/80 uppercase">Forecast</p>
                         <p className="text-sm font-semibold text-red-400">
-                          {currentRisk.forecast.ifLoss.mode} @ {formatPercent(currentRisk.forecast.ifLoss.riskPct)}
+                          In {lossesToLow} losses → {currentRisk.forecast.ifLoss.mode} @ {formatPercent(currentRisk.forecast.ifLoss.riskPct)}
                         </p>
                       </div>
                     </div>
@@ -190,6 +196,60 @@ export function DashboardPage() {
           </Card>
         </div>
       </Section>
+
+      {/* Live Trades */}
+      {hasData && (
+        <Section className="mb-6">
+          <Card>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Live / Active Trades</h3>
+                <p className="text-xs text-slate-500">Monitor live risk with entry, size, and stops</p>
+              </div>
+              <Badge variant={activeTrades.length > 0 ? 'info' : 'neutral'} size="sm">
+                {activeTrades.length} Active
+              </Badge>
+            </div>
+            {activeTrades.length > 0 ? (
+              <div className="space-y-3">
+                {activeTrades.map((trade) => (
+                  <div
+                    key={trade.id}
+                    className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr_1fr_1fr] gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Badge variant={trade.side === 'LONG' ? 'success' : 'danger'} size="sm">
+                        {trade.side}
+                      </Badge>
+                      <span className="text-lg font-semibold text-white">{trade.symbol}</span>
+                      <Badge variant="info" size="sm">Active</Badge>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Entry</p>
+                      <p className="text-sm text-white font-medium tabular-nums">{formatMoney(trade.entryPrice)}</p>
+                      <p className="text-xs text-slate-500">{trade.quantity.toLocaleString()} shares</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Stop</p>
+                      <p className="text-sm text-white font-medium tabular-nums">
+                        {trade.stopPrice ? formatMoney(trade.stopPrice) : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Opened</p>
+                      <p className="text-sm text-slate-300">{formatDateTime(trade.entryDate)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-10 text-center text-slate-500">
+                No active trades right now.
+              </div>
+            )}
+          </Card>
+        </Section>
+      )}
 
       {/* KPI Grid */}
       {hasData && (
@@ -261,19 +321,25 @@ export function DashboardPage() {
                       variant={
                         trade.outcome === 'WIN' ? 'success' : 
                         trade.outcome === 'LOSS' ? 'danger' : 
-                        trade.outcome === 'OPEN' ? 'info' : 'neutral'
+                        trade.outcome === 'ACTIVE' ? 'info' : 'neutral'
                       } 
                       size="sm"
                     >
-                      {trade.outcome}
+                      {trade.status === 'ACTIVE' ? 'Active' : trade.outcome}
                     </Badge>
                   </div>
-                  <span className={cn(
-                    'font-semibold',
-                    trade.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
-                  )} style={{ fontFeatureSettings: '"tnum"' }}>
-                    {trade.totalPnL >= 0 ? '+' : ''}{formatMoney(trade.totalPnL)}
-                  </span>
+                  {trade.status === 'ACTIVE' ? (
+                    <span className="text-xs text-slate-400">
+                      Entry {formatMoney(trade.entryPrice)} • {trade.quantity.toLocaleString()} sh
+                    </span>
+                  ) : (
+                    <span className={cn(
+                      'font-semibold',
+                      trade.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    )} style={{ fontFeatureSettings: '"tnum"' }}>
+                      {trade.totalPnL >= 0 ? '+' : ''}{formatMoney(trade.totalPnL)}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
