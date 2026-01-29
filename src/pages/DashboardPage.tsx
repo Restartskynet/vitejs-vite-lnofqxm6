@@ -487,7 +487,7 @@ export function DashboardPage() {
                         {winsToHigh === 0 ? (
                           <div className="mt-2 flex items-center gap-2">
                             <Badge variant="high" size="sm">HIGH active</Badge>
-                            <span className="text-xs text-ink-muted">Risk mode already elevated.</span>
+                            <span className="text-xs text-ink-muted">Risk mode is currently HIGH.</span>
                           </div>
                         ) : (
                           <>
@@ -508,9 +508,9 @@ export function DashboardPage() {
                     </div>
 
                     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Deterministic risk logic</p>
+                      <p className="text-sm font-semibold text-white">Risk Disclaimer</p>
                       <p className="text-xs text-ink-muted">
-                        Mode transitions are derived from imported trades only. Results vary. Process required.
+                        Mode transitions are derived from imported trades only. Results vary. Do not take this as financial advice.
                       </p>
                     </div>
                   </>
