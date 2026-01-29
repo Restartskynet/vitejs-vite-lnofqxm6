@@ -4,11 +4,22 @@ import { cn } from '../../lib/utils';
 interface UploadZoneProps {
   onFileSelect: (file: File, content: string) => void;
   isLoading?: boolean;
+  scanStage?: string;
+  scanDetail?: string;
+  scanPercent?: number;
   accept?: string;
   className?: string;
 }
 
-export function UploadZone({ onFileSelect, isLoading = false, accept = '.csv', className }: UploadZoneProps) {
+export function UploadZone({
+  onFileSelect,
+  isLoading = false,
+  scanStage = 'Scanning',
+  scanDetail = 'Validating rows',
+  scanPercent = 0,
+  accept = '.csv',
+  className,
+}: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,7 +90,7 @@ export function UploadZone({ onFileSelect, isLoading = false, accept = '.csv', c
       className={cn(
         'relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
         isDragging
-          ? 'border-sky-400 bg-sky-500/10 scale-[1.01]'
+          ? 'border-[rgb(var(--accent-info))] bg-[rgb(var(--accent-info)/0.12)] scale-[1.01]'
           : 'border-white/15 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04]',
         isLoading && 'pointer-events-none opacity-70',
         className
@@ -89,20 +100,20 @@ export function UploadZone({ onFileSelect, isLoading = false, accept = '.csv', c
 
       {isLoading ? (
         <>
-          <div className="relative w-full max-w-md mx-auto mb-5 rounded-2xl border border-sky-500/40 bg-sky-500/10 overflow-hidden">
-            <div className="absolute inset-0 bg-[linear-gradient(120deg,_transparent,_rgba(56,189,248,0.25),_transparent)] scan-sweep" />
-            <div className="relative grid grid-cols-3 gap-3 px-4 py-4 text-xs text-sky-200/80">
+          <div className="relative w-full max-w-md mx-auto mb-5 rounded-2xl border border-[rgb(var(--accent-info)/0.4)] bg-[rgb(var(--accent-info)/0.12)] overflow-hidden">
+            <div className="absolute inset-0 bg-[linear-gradient(120deg,_transparent,_rgb(var(--accent-info)/0.25),_transparent)] scan-sweep" />
+            <div className="relative grid grid-cols-3 gap-3 px-4 py-4 text-xs text-[rgb(var(--accent-info)/0.85)]">
               <div>
-                <p className="uppercase tracking-[0.2em] text-[9px] text-sky-200/60">Stage</p>
-                <p className="text-sm font-semibold text-sky-100">Scanning</p>
+                <p className="uppercase tracking-[0.2em] text-[9px] text-[rgb(var(--accent-info)/0.6)]">Stage</p>
+                <p className="text-sm font-semibold text-[rgb(var(--accent-info))]">{scanStage}</p>
               </div>
               <div>
-                <p className="uppercase tracking-[0.2em] text-[9px] text-sky-200/60">Step</p>
-                <p className="text-sm font-semibold text-sky-100">Validate rows</p>
+                <p className="uppercase tracking-[0.2em] text-[9px] text-[rgb(var(--accent-info)/0.6)]">Step</p>
+                <p className="text-sm font-semibold text-[rgb(var(--accent-info))]">{scanDetail}</p>
               </div>
               <div>
-                <p className="uppercase tracking-[0.2em] text-[9px] text-sky-200/60">Output</p>
-                <p className="text-sm font-semibold text-sky-100">Audit log</p>
+                <p className="uppercase tracking-[0.2em] text-[9px] text-[rgb(var(--accent-info)/0.6)]">Output</p>
+                <p className="text-sm font-semibold text-[rgb(var(--accent-info))]">{Math.min(scanPercent, 100)}%</p>
               </div>
             </div>
           </div>
@@ -111,8 +122,8 @@ export function UploadZone({ onFileSelect, isLoading = false, accept = '.csv', c
         </>
       ) : (
         <>
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <svg className="w-8 h-8 text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[rgb(var(--accent-info)/0.2)] border border-[rgb(var(--accent-info)/0.4)] flex items-center justify-center group-hover:scale-110 transition-transform">
+            <svg className="w-8 h-8 text-[rgb(var(--accent-info))]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
           </div>

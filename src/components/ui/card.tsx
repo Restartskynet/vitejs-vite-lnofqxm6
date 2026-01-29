@@ -12,7 +12,7 @@ export function Card({ children, className, glow = 'none', noPadding = false }: 
   const glowClasses = {
     high: 'shadow-glow-high',
     low: 'shadow-glow-low',
-    info: 'shadow-[0_0_50px_rgba(56,189,248,0.2)]',
+    info: 'shadow-glow-cyan',
     none: 'shadow-card-soft',
   };
 

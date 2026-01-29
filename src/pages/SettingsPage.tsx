@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDashboard } from '../stores/dashboardStore';
 import { Page } from '../components/layout';
 import { Card, Button, CurrencyInput, Input, Badge, ConfirmModal } from '../components/ui';
@@ -12,9 +12,72 @@ import type { PersistedFill, PersistedData } from '../types';
 export function SettingsPage() {
   const { state, actions } = useDashboard();
   const { settings, adjustments, hasData, importHistory, schemaWarning, strategy, fills } = state;
+
+  const themeOptions = [
+    {
+      id: 'default',
+      label: 'Harbor',
+      description: 'Cool sapphire with balanced teal accents.',
+      swatches: ['64 140 255', '62 190 168', '112 140 176'],
+    },
+    {
+      id: 'ion',
+      label: 'Citrine',
+      description: 'Warm amber energy with copper highlights.',
+      swatches: ['246 182 70', '255 140 84', '196 154 92'],
+    },
+    {
+      id: 'ultraviolet',
+      label: 'Verdant',
+      description: 'Fresh evergreen tones with calm contrast.',
+      swatches: ['88 196 140', '52 170 120', '92 150 130'],
+    },
+    {
+      id: 'nocturne',
+      label: 'Rouge',
+      description: 'Bold red accents with refined depth.',
+      swatches: ['248 114 114', '220 82 98', '170 112 126'],
+    },
+  ] as const;
+  type ThemeId = typeof themeOptions[number]['id'];
+  const getInitialTheme = (): ThemeId => {
+    if (typeof window === 'undefined') return 'default';
+    const saved = window.localStorage.getItem('restart-theme');
+    if (saved && themeOptions.some((theme) => theme.id === saved)) {
+      return saved as ThemeId;
+    }
+    return 'default';
+  };
+  const [selectedTheme, setSelectedTheme] = useState<ThemeId>(getInitialTheme);
+  const [isGridEnabled, setIsGridEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('restart-grid') === 'on';
+  });
   
   const [showResetModal, setShowResetModal] = useState(false);
   const [showStrategyModal, setShowStrategyModal] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (selectedTheme === 'default') {
+      window.localStorage.removeItem('restart-theme');
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      window.localStorage.setItem('restart-theme', selectedTheme);
+      document.documentElement.setAttribute('data-theme', selectedTheme);
+    }
+  }, [selectedTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isGridEnabled) {
+      window.localStorage.setItem('restart-grid', 'on');
+      document.documentElement.setAttribute('data-grid', 'on');
+    } else {
+      window.localStorage.setItem('restart-grid', 'off');
+      document.documentElement.setAttribute('data-grid', 'off');
+    }
+  }, [isGridEnabled]);
 
   const handleStartingEquityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
@@ -51,7 +114,7 @@ export function SettingsPage() {
   };
 
   return (
-    <Page title="Settings" subtitle="Configure your account and preferences">
+    <Page title="Settings" subtitle="Configure your account and local preferences">
       {/* Schema Warning Banner */}
       {schemaWarning && (
         <Card className="mb-6 border-amber-500/40">
@@ -151,6 +214,73 @@ export function SettingsPage() {
           </Button>
         </Card>
 
+        <Card className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Customization</h3>
+              <p className="text-xs text-ink-muted">Preset themes aligned to your trading mode.</p>
+            </div>
+            <Badge variant="info" size="sm">Theme</Badge>
+          </div>
+          <div className="space-y-3">
+            {themeOptions.map((theme) => {
+              const isActive = selectedTheme === theme.id;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  onClick={() => setSelectedTheme(theme.id)}
+                  className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                    isActive
+                      ? 'border-[rgb(var(--accent-low)/0.6)] bg-[rgb(var(--accent-low)/0.12)]'
+                      : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{theme.label}</p>
+                      <p className="text-xs text-ink-muted">{theme.description}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {theme.swatches.map((swatch) => (
+                        <span
+                          key={swatch}
+                          className="h-2.5 w-2.5 rounded-full border border-white/20"
+                          style={{ backgroundColor: `rgb(${swatch})` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">Animated grid</p>
+                <p className="text-xs text-ink-muted">Subtle motion layer behind the dashboard.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGridEnabled((prev) => !prev)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+                  isGridEnabled
+                    ? 'border-[rgb(var(--accent-low)/0.6)] bg-[rgb(var(--accent-low)/0.35)]'
+                    : 'border-white/20 bg-white/10'
+                }`}
+                aria-pressed={isGridEnabled}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isGridEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </Card>
+
         {/* Manual Adjustments */}
         <div className="lg:col-span-2">
           <AdjustmentsTable
@@ -213,6 +343,16 @@ export function SettingsPage() {
               Reset Local Data
             </Button>
           </div>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <h3 className="text-lg font-semibold text-white mb-2">About Restart Dash</h3>
+          <p className="text-sm text-slate-400">
+            Restart’s Trading Co-Pilot helps you stick to a deterministic risk plan using your own CSV imports. All processing is local-only.
+          </p>
+          <p className="text-xs text-ink-muted mt-2">
+            Results vary. Process required. This tool does not provide financial advice.
+          </p>
         </Card>
       </div>
 

@@ -35,7 +35,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className={cn(
               'w-full rounded-xl bg-white/[0.04] border border-white/10 text-white font-medium',
               'placeholder:text-ink-subtle',
-              'focus-visible:outline-none focus-visible:border-sky-400/60 focus-visible:ring-2 focus-visible:ring-sky-400/20',
+              'focus-visible:outline-none focus-visible:border-[rgb(var(--accent-info)/0.7)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--accent-info)/0.25)]',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               'transition-all duration-150',
               sizeClasses[inputSize],

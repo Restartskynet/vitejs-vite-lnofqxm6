@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboard } from '../stores/dashboardStore';
 import { Page, Section } from '../components/layout';
@@ -7,10 +7,23 @@ import { UploadZone, CSVPreview, ImportSummary, ImportHistory } from '../compone
 import { previewCSV, parseWebullCSV } from '../engine/webullParser';
 import type { CSVPreviewExtended, ImportResultExtended } from '../engine/types';
 import { formatDateTime } from '../lib/utils';
-import sampleCsv from '../../testdata/valid_small.csv?raw';
+import sampleHigh from '../../testdata/demo_high_mode.csv?raw';
+import sampleLow from '../../testdata/demo_low_mode.csv?raw';
 
-type UploadStep = 'upload' | 'preview' | 'confirm';
+type UploadStep = 'upload' | 'preview' | 'confirm' | 'success';
 type ImportMode = 'merge' | 'replace';
+
+type ScanStep = {
+  stage: string;
+  detail: string;
+};
+
+const scanSteps: ScanStep[] = [
+  { stage: 'Parsing', detail: 'Reading rows' },
+  { stage: 'Validating', detail: 'Checking columns' },
+  { stage: 'Reconstructing', detail: 'Building fills' },
+  { stage: 'Summarizing', detail: 'Final snapshot' },
+];
 
 export function UploadPage() {
   const navigate = useNavigate();
@@ -22,6 +35,37 @@ export function UploadPage() {
   const [importResult, setImportResult] = useState<ImportResultExtended | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>('merge');
+  const [scanIndex, setScanIndex] = useState(0);
+  const [scanPercent, setScanPercent] = useState(0);
+  const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
+  const runScanSequence = useCallback((onComplete: () => void) => {
+    timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    timersRef.current = [];
+    setIsProcessing(true);
+    setScanIndex(0);
+    setScanPercent(0);
+
+    scanSteps.forEach((stepItem, index) => {
+      const timer = window.setTimeout(() => {
+        setScanIndex(index);
+        setScanPercent(Math.round(((index + 1) / scanSteps.length) * 100));
+      }, index * 420);
+      timersRef.current.push(timer);
+    });
+
+    const finalTimer = window.setTimeout(() => {
+      onComplete();
+      setIsProcessing(false);
+    }, scanSteps.length * 420 + 200);
+    timersRef.current.push(finalTimer);
+  }, []);
 
   const handleFileSelect = useCallback(
     (selectedFile: File, content: string) => {
@@ -35,44 +79,39 @@ export function UploadPage() {
     []
   );
 
-  const handleUseSample = useCallback(() => {
-    const sampleFile = new File([sampleCsv], 'restart-sample.csv', { type: 'text/csv' });
-    handleFileSelect(sampleFile, sampleCsv);
+  const handleUseSample = useCallback((sample: string, name: string) => {
+    const sampleFile = new File([sample], name, { type: 'text/csv' });
+    handleFileSelect(sampleFile, sample);
   }, [handleFileSelect]);
 
   const handlePreviewContinue = useCallback(() => {
     if (!fileContent) return;
 
-    setIsProcessing(true);
-
-    setTimeout(() => {
+    runScanSequence(() => {
       const result = parseWebullCSV(fileContent);
       setImportResult(result);
       setStep('confirm');
-      setIsProcessing(false);
-    }, 500);
-  }, [fileContent]);
+    });
+  }, [fileContent, runScanSequence]);
 
   const handleImport = useCallback(() => {
     if (!importResult || !importResult.success || !file) return;
 
-    setIsProcessing(true);
+    runScanSequence(() => {
+      actions.importFills(
+        importResult.fills,
+        {
+          fileName: file.name,
+          rowCount: importResult.stats.totalRows,
+          fillCount: importResult.stats.validFills,
+          dateRange: importResult.stats.dateRange,
+        },
+        importMode
+      );
 
-    actions.importFills(
-      importResult.fills,
-      {
-        fileName: file.name,
-        rowCount: importResult.stats.totalRows,
-        fillCount: importResult.stats.validFills,
-        dateRange: importResult.stats.dateRange,
-      },
-      importMode
-    );
-
-    setTimeout(() => {
-      navigate('/');
-    }, 300);
-  }, [importResult, file, actions, navigate, importMode]);
+      setStep('success');
+    });
+  }, [importResult, file, actions, importMode, runScanSequence]);
 
   const handleReset = useCallback(() => {
     setStep('upload');
@@ -82,25 +121,28 @@ export function UploadPage() {
     setImportResult(null);
     setIsProcessing(false);
     setImportMode('merge');
+    setScanIndex(0);
+    setScanPercent(0);
   }, []);
 
   const latestImport = state.importHistory[0];
+  const scanStage = scanSteps[scanIndex] ?? scanSteps[0];
 
   return (
     <Page title="Import Trades" subtitle="Local-only CSV import for Restart’s Trading Co-Pilot">
       <div className="flex items-center justify-center gap-2 mb-8">
-        {['Upload', 'Preview', 'Confirm'].map((label, i) => {
-          const stepNames: UploadStep[] = ['upload', 'preview', 'confirm'];
+        {['Upload', 'Preview', 'Confirm', 'Success'].map((label, i) => {
+          const stepNames: UploadStep[] = ['upload', 'preview', 'confirm', 'success'];
           const isActive = step === stepNames[i];
           const isPast = stepNames.indexOf(step) > i;
 
           return (
             <div key={label} className="flex items-center">
-              {i > 0 && <div className={`w-8 h-px mx-2 ${isPast ? 'bg-sky-400' : 'bg-white/20'}`} />}
+              {i > 0 && <div className={`w-8 h-px mx-2 ${isPast ? 'bg-[rgb(var(--accent-info))]' : 'bg-white/20'}`} />}
               <div
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
                   isActive
-                    ? 'bg-sky-500/20 text-sky-300 border-sky-400/40'
+                    ? 'bg-[rgb(var(--accent-info)/0.2)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.4)]'
                     : isPast
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                       : 'bg-white/5 text-ink-muted border-white/10'
@@ -128,20 +170,25 @@ export function UploadPage() {
             <Card className="flex flex-col gap-6">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-ink-muted">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 motion-safe:animate-pulse" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--accent-low))] motion-safe:animate-pulse" />
                   Local-first import
                 </div>
                 <h3 className="text-lg font-semibold text-white">Drop your Webull Orders Records CSV</h3>
                 <p className="text-xs text-ink-muted">No uploads, no servers — everything stays on this device.</p>
               </div>
-              <UploadZone onFileSelect={handleFileSelect} isLoading={isProcessing} />
+              <UploadZone
+                onFileSelect={handleFileSelect}
+                isLoading={isProcessing}
+                scanStage={scanStage.stage}
+                scanDetail={scanStage.detail}
+                scanPercent={scanPercent}
+              />
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button variant="secondary" onClick={handleUseSample} icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75h9A2.25 2.25 0 0118.75 6v12A2.25 2.25 0 0116.5 20.25h-9A2.25 2.25 0 015.25 18V6A2.25 2.25 0 017.5 3.75z" />
-                  </svg>
-                }>
-                  Try Demo Data
+                <Button variant="secondary" onClick={() => handleUseSample(sampleHigh, 'restart-demo-high.csv')}>
+                  Demo Data (Ends HIGH)
+                </Button>
+                <Button variant="secondary" onClick={() => handleUseSample(sampleLow, 'restart-demo-low.csv')}>
+                  Demo Data (Ends LOW)
                 </Button>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs text-ink-muted">
@@ -158,7 +205,7 @@ export function UploadPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-white">Last import</h3>
-                  <p className="text-xs text-ink-muted">Quick diagnostics</p>
+                  <p className="text-xs text-ink-muted">Local status</p>
                 </div>
                 <Badge variant={latestImport ? 'info' : 'neutral'} size="sm">
                   {latestImport ? 'Recorded' : 'None'}
@@ -189,7 +236,9 @@ export function UploadPage() {
                       <p className="text-red-300 font-semibold">{latestImport.stats.warningsCount}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-ink-muted">Diagnostics are stored locally for audit trail integrity.</p>
+                  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs text-ink-muted">
+                    Saved locally · Diagnostics are stored on this device only.
+                  </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-ink-muted">
@@ -216,7 +265,7 @@ export function UploadPage() {
                   onClick={() => setImportMode('merge')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                     importMode === 'merge'
-                      ? 'bg-sky-500/20 text-sky-300 border-sky-400/40'
+                      ? 'bg-[rgb(var(--accent-info)/0.2)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.4)]'
                       : 'bg-white/5 text-ink-muted border-white/10'
                   }`}
                 >
@@ -266,6 +315,44 @@ export function UploadPage() {
           )}
 
           <ImportSummary result={importResult} onConfirm={handleImport} onCancel={handleReset} isProcessing={isProcessing} />
+        </Section>
+      )}
+
+      {step === 'success' && importResult && (
+        <Section>
+          <Card className="text-center">
+            <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-[rgb(var(--accent-high)/0.2)] border border-[rgb(var(--accent-high)/0.4)] flex items-center justify-center">
+              <svg className="w-8 h-8 text-[rgb(var(--accent-high))]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Import complete</h3>
+            <p className="text-sm text-ink-muted mb-4">
+              {importResult.stats.totalRows} rows imported · Saved locally.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                <p className="text-[10px] text-ink-muted uppercase tracking-wider">Rows</p>
+                <p className="text-lg font-bold text-white">{importResult.stats.totalRows}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                <p className="text-[10px] text-emerald-200/80 uppercase tracking-wider">Valid</p>
+                <p className="text-lg font-bold text-emerald-200">{importResult.stats.validFills}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <p className="text-[10px] text-amber-200/80 uppercase tracking-wider">Skipped</p>
+                <p className="text-lg font-bold text-amber-200">{importResult.stats.skippedRows}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                <p className="text-[10px] text-ink-muted uppercase tracking-wider">Symbols</p>
+                <p className="text-lg font-bold text-white">{importResult.stats.symbols.length}</p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button onClick={() => navigate('/')}>Go to Dashboard</Button>
+              <Button variant="secondary" onClick={handleReset}>Import another CSV</Button>
+            </div>
+          </Card>
         </Section>
       )}
 

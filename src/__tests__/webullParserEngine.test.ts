@@ -8,6 +8,14 @@ const buildCsv = (rows: string[]) => [
 ].join("\n");
 
 describe("Webull parser + trade builder", () => {
+  test("handles empty import safely", () => {
+    const parsed = parseWebullCSV('');
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.fills.length).toBe(0);
+    expect(parsed.errors.length).toBeGreaterThan(0);
+  });
+
   test("parses numeric formats and reports skipped rows", () => {
     const csv = buildCsv([
       "AAPL,BUY,Filled,\"2,500\",\"$1,234.56\",01/22/2026 09:31:00 EST,($1.25)",
