@@ -17,6 +17,7 @@ These docs are for developers working on this repo. They define contracts and in
 npm install
 npm run dev
 npm run build
+npm run lint
 npm run test
 ```
 

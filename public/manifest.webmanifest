@@ -1,0 +1,16 @@
+{
+  "name": "Restart’s Trading Co-Pilot",
+  "short_name": "Restart Dash",
+  "description": "Local-first trading co-pilot for focused risk execution.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060810",
+  "theme_color": "#5e7cff",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

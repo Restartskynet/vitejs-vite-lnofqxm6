@@ -1,11 +1,16 @@
 import { useDashboardState } from '../../stores/dashboardStore';
 import { Navigation } from './Navigation';
 import { Badge } from '../ui';
-import { formatPercent, formatDateTime } from '../../lib/utils';
+import { formatPercent, formatDateTime, cn } from '../../lib/utils';
 
 const LogoIcon = () => (
-  <svg className="w-5 h-5 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m0 0l4-4m-4 4l-4-4m9-7.5h.01M6.25 6.5h.01" />
+  <svg className="w-6 h-6 text-[rgb(var(--accent-high))]" fill="none" viewBox="0 0 32 32" stroke="currentColor" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 4.5a11.5 11.5 0 1011.5 11.5" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 4.5c4.5 2.6 7.5 7 7.5 11.5S20.5 24.9 16 27.5" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 16h23" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 4.5c-3.2 2.1-5.5 6.5-5.5 11.5S12.8 25.9 16 27.5" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M22.5 8.5h-13" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M22.5 23.5h-13" />
   </svg>
 );
 
@@ -14,23 +19,26 @@ export function Header() {
   const latestImport = importHistory[0];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-slate-950/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-slate-950/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-300 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <div className="relative w-10 h-10 rounded-2xl bg-slate-900/80 border border-[rgb(var(--accent-low)/0.4)] flex items-center justify-center shadow-[0_0_24px_rgb(var(--accent-high)/0.2)] logo-glow">
+              <span className="pointer-events-none absolute inset-0 rounded-2xl logo-shimmer" />
               <LogoIcon />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Restart’s Trading Co-Pilot</h1>
-              <p className="text-[10px] text-ink-muted uppercase tracking-wider hidden sm:block">Offline risk command center</p>
+              <h1 className="text-xl font-bold text-white tracking-tight font-display">Restart Dash</h1>
+              <p className="text-[10px] text-ink-muted uppercase tracking-wider hidden sm:block">
+                Restart’s Trading Co-Pilot
+              </p>
             </div>
           </div>
 
           <div className="hidden sm:flex items-center gap-4">
             <Navigation showLabels={false} />
             <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/[0.03] text-[10px] uppercase tracking-[0.2em] text-ink-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 motion-safe:animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--accent-low))] motion-safe:animate-pulse" />
               Saved locally
             </div>
             {latestImport && (
@@ -43,7 +51,16 @@ export function Header() {
                 <Badge variant={currentRisk.mode === 'HIGH' ? 'high' : 'low'} size="md" pulse>
                   {currentRisk.mode}
                 </Badge>
-                <span className="text-xl font-bold text-white tabular-nums">{formatPercent(currentRisk.todayRiskPct)}</span>
+                <span
+                  className={cn(
+                    'text-xl font-bold tabular-nums',
+                    currentRisk.mode === 'HIGH'
+                      ? 'text-[rgb(var(--accent-high))]'
+                      : 'text-[rgb(var(--accent-low))]'
+                  )}
+                >
+                  {formatPercent(currentRisk.todayRiskPct)}
+                </span>
               </div>
             )}
           </div>

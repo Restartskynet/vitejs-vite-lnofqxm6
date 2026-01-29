@@ -1,15 +1,34 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { Header } from './Header';
 import { MobileNavigation } from './Navigation';
 import { cn } from '../../lib/utils';
 
 export function AppShell({ children, className }: { children: ReactNode; className?: string }) {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedTheme = window.localStorage.getItem('restart-theme');
+    const savedGrid = window.localStorage.getItem('restart-grid');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    if (savedGrid === 'on') {
+      document.documentElement.setAttribute('data-grid', 'on');
+    } else {
+      document.documentElement.setAttribute('data-grid', 'off');
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.18),_transparent_45%),radial-gradient(circle_at_25%_20%,_rgba(56,189,248,0.12),_transparent_40%),radial-gradient(circle_at_80%_0%,_rgba(16,185,129,0.12),_transparent_40%)] opacity-90" />
-        <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl ambient-orbit" />
-        <div className="absolute -bottom-40 -left-40 h-[30rem] w-[30rem] rounded-full bg-emerald-500/10 blur-3xl ambient-orbit" />
+        <div className="absolute inset-0 synthwave-backdrop" />
+        <div className="absolute inset-0 synthwave-grid motion-safe:grid-ambient opacity-70" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgb(var(--accent-glow)/0.18),_transparent_60%)]" />
+        <div className="absolute -top-40 right-0 h-[26rem] w-[26rem] rounded-full bg-[rgb(var(--accent-high)/0.12)] blur-3xl ambient-orbit" />
+        <div className="absolute -bottom-48 left-0 h-[32rem] w-[32rem] rounded-full bg-[rgb(var(--accent-low)/0.12)] blur-3xl ambient-orbit" />
+        <div className="absolute inset-0 opacity-[0.08] mix-blend-screen bg-[linear-gradient(transparent_0%,_rgba(255,255,255,0.08)_50%,_transparent_100%)]" />
       </div>
       <Header />
       <main className={cn('max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative pb-24 sm:pb-8', className)}>
@@ -22,7 +41,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
               <p className="text-white font-semibold">Restart’s Trading Co-Pilot</p>
               <p className="text-xs text-ink-muted">Local-first • Deterministic • Audit-ready</p>
             </div>
-            <p className="text-xs text-ink-muted">Restart’s Trading Co-Pilot is a rule-enforcement tool. Not financial advice.</p>
+            <p className="text-xs text-ink-muted">Restart’s Trading Co-Pilot reinforces risk process. Not financial advice.</p>
           </div>
         </div>
       </footer>
@@ -38,7 +57,7 @@ export function Page({ title, subtitle, action, children, className }: { title?:
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {title && (
             <div>
-              <h1 className="text-2xl font-bold text-white">{title}</h1>
+              <h1 className="text-2xl font-bold text-white font-display">{title}</h1>
               {subtitle && <p className="text-sm text-ink-muted mt-1">{subtitle}</p>}
             </div>
           )}
@@ -57,7 +76,7 @@ export function Section({ title, subtitle, action, children, className }: { titl
         <div className="flex items-center justify-between">
           {title && (
             <div>
-              <h2 className="text-lg font-semibold text-white">{title}</h2>
+              <h2 className="text-lg font-semibold text-white font-display">{title}</h2>
               {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
             </div>
           )}

@@ -15,10 +15,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    'bg-gradient-to-r from-blue-500 to-sky-400 text-slate-950 border-transparent shadow-lg shadow-blue-500/25 hover:brightness-110',
+    'bg-[rgb(var(--accent-low))] text-white border-[rgb(var(--accent-low)/0.6)] shadow-[0_0_24px_rgb(var(--accent-low)/0.35)] hover:bg-[rgb(var(--accent-low)/0.9)]',
   secondary:
     'bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/10 hover:border-white/20',
-  ghost: 'bg-transparent hover:bg-white/[0.06] text-slate-400 hover:text-white border-transparent',
+  ghost: 'bg-transparent hover:bg-white/[0.06] text-ink-muted hover:text-white border-transparent',
   danger: 'bg-red-500/80 hover:bg-red-500 text-white border-red-500/40 shadow-lg shadow-red-500/20',
 };
 
@@ -58,7 +58,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         className={cn(
           'inline-flex items-center justify-center border font-semibold transition-all duration-[var(--motion-duration-fast)] ease-[var(--motion-ease-standard)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--accent-info)/0.7)] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
           'active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
           variantClasses[variant],
           sizeClasses[size],

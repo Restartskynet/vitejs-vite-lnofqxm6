@@ -28,7 +28,7 @@ const SettingsIcon = () => (
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: <DashboardIcon /> },
-  { path: '/upload', label: 'Upload', icon: <UploadIcon /> },
+  { path: '/upload', label: 'Import', icon: <UploadIcon /> },
   { path: '/trades', label: 'Trades', icon: <TradesIcon /> },
   { path: '/settings', label: 'Settings', icon: <SettingsIcon /> },
 ];
@@ -45,7 +45,7 @@ export function Navigation({ showLabels = true }: { showLabels?: boolean }) {
               'flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
               'text-sm font-medium',
               isActive
-                ? 'bg-white/10 text-white shadow-lg shadow-black/30'
+                ? 'bg-white/10 text-white shadow-lg shadow-black/30 neon-ring'
                 : 'text-ink-muted hover:text-white hover:bg-white/5'
             )
           }
@@ -70,7 +70,7 @@ export function MobileNavigation() {
               cn(
                 'flex flex-col items-center justify-center gap-1 w-16 py-2 rounded-lg transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
                 isActive
-                  ? 'text-sky-300'
+                  ? 'text-[rgb(var(--accent-info))]'
                   : 'text-ink-subtle'
               )
             }

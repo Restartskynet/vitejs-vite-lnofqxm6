@@ -1,6 +1,6 @@
 # Future Plans & Ideas
 
-This document captures forward-looking product, marketing, and UX/engineering ideas discussed for **Restarts Trading Co‑Pilot** (website + PWA). The emphasis is **conversion clarity**, **command-center trust**, and **offline-first, deterministic** behavior that feels “vibe-free.”
+This document captures forward-looking product, marketing, and UX/engineering ideas discussed for **Restarts Trading Co‑Pilot** (website + PWA). The emphasis is **conversion clarity**, **control-hub trust**, and **offline-first, deterministic** behavior that feels “vibe-free.”
 
 ---
 
@@ -138,14 +138,14 @@ This document captures forward-looking product, marketing, and UX/engineering id
 - Use the **Speculation Rules API** to pre-load/prerender key pages when user intent is detected (hover toward nav, hover CTA).
 
 ### Dark mode by default
-- Dark mode conveys “command center.”
+- Dark mode conveys a focused, high-control environment.
 - Ensure `prefers-color-scheme` is correctly supported.
 
 ---
 
-## 8) Above-the-Fold Concept: The “Command Center” Hook
+## 8) Above-the-Fold Concept: The “Control Hub” Hook
 
-Instead of a generic SaaS hero, the site should immediately immerse the user in a high-stakes, disciplined environment where **control** is the solution.
+Instead of a generic SaaS hero, the site should immediately immerse the user in a high-stakes, focused environment where **control** is the solution.
 
 ### Dynamic hero
 - Subtle animation of a “live” market chart with the PWA overlay.
@@ -241,7 +241,7 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 
 ### Kinetic feedback
 - When throttle moves HIGH → LOW, don’t just change text.
-- Use layout transitions where UI “contracts/tightens” to represent discipline and restriction.
+- Use layout transitions where UI “contracts/tightens” to represent control and restriction.
 
 ### If/Then visualizer
 - Interactive forecast tree:
@@ -269,7 +269,7 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 
 ### Rule-based disclaimer as a brand promise
 - High-readability box:
-  - “Restarts is a Rule-Enforcement Engine. We do not provide financial advice. Your strategy, your rules, our discipline.”
+  - “Restarts is a Rule-Enforcement Engine. We do not provide financial advice. Your strategy, your rules, our focus.”
 
 ---
 

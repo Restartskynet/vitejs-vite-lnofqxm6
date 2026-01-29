@@ -1,7 +1,16 @@
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { Trade } from "../engine/types";
-import { computeRiskState, STRATEGY } from "../engine/riskEngine";
+import { computeRiskState, STRATEGY, getCurrentRisk } from "../engine/riskEngine";
+import { parseWebullCSV } from "../engine/webullParser";
+import { buildTrades } from "../engine/tradesBuilder";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixture = (name: string) =>
+  readFileSync(resolve(__dirname, "../../testdata", name), "utf8");
 
 // Helper to create a test trade that matches the Trade interface
 function makeTrade(pnl: number, exitTs: Date): Trade {
@@ -95,5 +104,25 @@ describe("Restart throttle state machine (per-trade)", () => {
     expect(r.lowWinsProgress).toBe(1);
     expect(r.tomorrowIfWinRiskPct).toBe(STRATEGY.highModeRiskPct);
     expect(r.tomorrowIfLossRiskPct).toBe(STRATEGY.lowModeRiskPct);
+  });
+
+  test("demo CSV ends in HIGH mode", () => {
+    const csv = fixture("demo_high_mode.csv");
+    const parsed = parseWebullCSV(csv);
+    const { trades } = buildTrades(parsed.fills);
+
+    const risk = getCurrentRisk(trades, 25000, STRATEGY);
+
+    expect(risk.mode).toBe("HIGH");
+  });
+
+  test("demo CSV ends in LOW mode", () => {
+    const csv = fixture("demo_low_mode.csv");
+    const parsed = parseWebullCSV(csv);
+    const { trades } = buildTrades(parsed.fills);
+
+    const risk = getCurrentRisk(trades, 25000, STRATEGY);
+
+    expect(risk.mode).toBe("LOW");
   });
 });

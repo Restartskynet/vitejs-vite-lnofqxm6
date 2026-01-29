@@ -19,7 +19,7 @@ export function TradesPage() {
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">No trades yet</h3>
             <p className="text-sm text-slate-400 mb-6 max-w-sm mx-auto">
-              Import your Webull CSV to see a detailed breakdown of every trade with P&L tracking.
+              Import your Webull CSV to see a detailed breakdown of every trade and risk outcome.
             </p>
             <Link to="/upload">
               <Button>

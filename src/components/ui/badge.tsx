@@ -13,12 +13,12 @@ interface BadgeProps {
 }
 
 const coreVariantClasses: Record<Exclude<BadgeVariant, 'default'>, string> = {
-  high: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/40',
-  low: 'bg-amber-500/15 text-amber-300 border-amber-400/40',
+  high: 'bg-[rgb(var(--accent-high)/0.16)] text-[rgb(var(--accent-high))] border-[rgb(var(--accent-high)/0.4)]',
+  low: 'bg-[rgb(var(--accent-low)/0.16)] text-[rgb(var(--accent-low))] border-[rgb(var(--accent-low)/0.4)]',
   success: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/40',
   danger: 'bg-red-500/15 text-red-300 border-red-400/40',
   warning: 'bg-amber-500/15 text-amber-300 border-amber-400/40',
-  info: 'bg-sky-500/15 text-sky-300 border-sky-400/40',
+  info: 'bg-[rgb(var(--accent-info)/0.16)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.4)]',
   neutral: 'bg-white/5 text-ink-muted border-border/60',
 };
 
@@ -34,12 +34,12 @@ const sizeClasses: Record<BadgeSize, string> = {
 };
 
 const corePulseColors: Record<Exclude<BadgeVariant, 'default'>, string> = {
-  high: 'bg-emerald-300',
-  low: 'bg-amber-300',
+  high: 'bg-[rgb(var(--accent-high))]',
+  low: 'bg-[rgb(var(--accent-low))]',
   success: 'bg-emerald-300',
   danger: 'bg-red-300',
   warning: 'bg-amber-300',
-  info: 'bg-sky-300',
+  info: 'bg-[rgb(var(--accent-info))]',
   neutral: 'bg-slate-400',
 };
 
