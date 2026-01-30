@@ -27,6 +27,9 @@ jobs:
       - name: Install audit tools
         run: npm install -D lighthouse @axe-core/cli
 
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
       - name: Start preview server
         run: npm run preview -- --host 0.0.0.0 --port 4173 &
 
@@ -44,11 +47,12 @@ jobs:
 
       - name: Lighthouse audits
         run: |
-          npx lighthouse http://127.0.0.1:4173/ --output html --output-path ./lighthouse-dashboard.html
-          npx lighthouse http://127.0.0.1:4173/upload --output html --output-path ./lighthouse-upload.html
-          npx lighthouse http://127.0.0.1:4173/trades --output html --output-path ./lighthouse-trades.html
-          npx lighthouse http://127.0.0.1:4173/settings --output html --output-path ./lighthouse-settings.html
-          npx lighthouse http://127.0.0.1:4173/legal --output html --output-path ./lighthouse-legal.html
+          export LIGHTHOUSE_FLAGS="--chrome-flags=\\\"--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu\\\""
+          xvfb-run -a npx lighthouse http://127.0.0.1:4173/ --output html --output-path ./lighthouse-dashboard.html $LIGHTHOUSE_FLAGS
+          xvfb-run -a npx lighthouse http://127.0.0.1:4173/upload --output html --output-path ./lighthouse-upload.html $LIGHTHOUSE_FLAGS
+          xvfb-run -a npx lighthouse http://127.0.0.1:4173/trades --output html --output-path ./lighthouse-trades.html $LIGHTHOUSE_FLAGS
+          xvfb-run -a npx lighthouse http://127.0.0.1:4173/settings --output html --output-path ./lighthouse-settings.html $LIGHTHOUSE_FLAGS
+          xvfb-run -a npx lighthouse http://127.0.0.1:4173/legal --output html --output-path ./lighthouse-legal.html $LIGHTHOUSE_FLAGS
 
       - name: Axe audits
         run: |
