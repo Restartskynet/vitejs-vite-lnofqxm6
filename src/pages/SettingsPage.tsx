@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useDashboard } from '../stores/dashboardStore';
 import { Page } from '../components/layout';
 import { Card, Button, CurrencyInput, Input, Badge, ConfirmModal } from '../components/ui';
@@ -7,11 +8,11 @@ import { AdjustmentsTable } from '../components/adjustments';
 import { StrategyModal } from '../components/strategy';
 import { BackupRestore } from '../components/backup';
 import { formatPercent, formatMoney } from '../lib/utils';
-import type { PersistedFill, PersistedData } from '../types';
+import type { PersistedFill, PersistedData, PersistedPendingOrder } from '../types';
 
 export function SettingsPage() {
   const { state, actions } = useDashboard();
-  const { settings, adjustments, hasData, importHistory, schemaWarning, strategy, fills } = state;
+  const { settings, adjustments, hasData, importHistory, schemaWarning, strategy, fills, pendingOrders } = state;
 
   const themeOptions = [
     {
@@ -107,6 +108,17 @@ export function SettingsPage() {
     marketDate: f.marketDate,
     rowIndex: f.rowIndex,
     stopPrice: f.stopPrice ?? null,
+  }));
+
+  const persistedPendingOrders: PersistedPendingOrder[] = pendingOrders.map((po) => ({
+    symbol: po.symbol,
+    side: po.side,
+    price: po.price,
+    stopPrice: po.stopPrice,
+    limitPrice: po.limitPrice,
+    quantity: po.quantity,
+    placedTime: po.placedTime.toISOString(),
+    type: po.type,
   }));
 
   const handleImportBackup = (data: PersistedData, mode: 'replace' | 'merge') => {
@@ -332,6 +344,7 @@ export function SettingsPage() {
               settings={settings}
               importHistory={importHistory}
               adjustments={adjustments}
+              pendingOrders={persistedPendingOrders}
               onImport={handleImportBackup}
             />
             <Button 
@@ -346,13 +359,27 @@ export function SettingsPage() {
         </Card>
 
         <Card className="lg:col-span-2">
-          <h3 className="text-lg font-semibold text-white mb-2">About Restart Dash</h3>
+          <h3 className="text-lg font-semibold text-white mb-2">Legal &amp; About</h3>
           <p className="text-sm text-slate-400">
             Restart’s Trading Co-Pilot helps you stick to a deterministic risk plan using your own CSV imports. All processing is local-only.
           </p>
           <p className="text-xs text-ink-muted mt-2">
             Results vary. Process required. This tool does not provide financial advice.
           </p>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <Link
+              to="/legal"
+              className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-ink-muted hover:text-white transition-colors"
+            >
+              Legal Disclaimer
+            </Link>
+            <Link
+              to="/legal"
+              className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-ink-muted hover:text-white transition-colors"
+            >
+              Privacy &amp; Data Storage
+            </Link>
+          </div>
         </Card>
       </div>
 

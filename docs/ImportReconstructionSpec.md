@@ -152,6 +152,16 @@ If the broker export provides stop/trigger price:
 If stop price is absent:
 - `stopPrice = null`
 
+### Pending order inference (Orders Records)
+
+When Orders Records include pending exit-side orders without explicit stop metadata:
+- Pending orders placed **after entry** may be used to infer stop/target levels for **ACTIVE** trades.
+- Inference rules (only when unambiguous):
+  - LONG: pending SELL with `price <= entryPrice` → treat as stop
+  - SHORT: pending BUY with `price >= entryPrice` → treat as stop
+- If a pending order is clearly a target (above entry for LONG, below entry for SHORT), store it as a pending exit/target reference.
+- If ambiguity remains, leave `stopPrice = null` and keep pendingExit metadata only.
+
 ---
 
 ## Status naming
@@ -189,4 +199,3 @@ A reconstruction fix is not “done” until tests exist for:
 - flip creates two trades (close + new open)
 - LONG vs SHORT P&L sign correctness
 - deterministic behavior when timestamps tie (rowIndex ordering)
-

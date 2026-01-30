@@ -43,6 +43,9 @@ const COLUMN_ALIASES: Record<string, string[]> = {
     'Avg Price', 'Average Price', 'Price', 'Fill Price', 'AVG PRICE', 
     'Exec Price', 'Filled Price', 'Avg. Price', 'AvgPrice', 'Execution Price'
   ],
+
+  // Pending Order Price (Orders Records)
+  'Price': ['Price', 'Order Price', 'Order Price (USD)'],
   
   // Time
   'Filled Time': [
@@ -457,6 +460,7 @@ export function parseWebullCSV(text: string): ImportResultExtended {
         const limitPrice = parseNumber(row[colIdx['Limit Price']]);
         const stopPrice = parseNumber(row[colIdx['Stop Price']]);
         const avgPrice = parseNumber(row[colIdx['Avg Price']]);
+        const orderPrice = colIdx['Price'] >= 0 ? parseNumber(row[colIdx['Price']]) : null;
         const pendingQty = parseNumber(row[colIdx['Total Qty']]) ?? parseNumber(row[colIdx['Filled Qty']]);
         const placedTimeRaw = colIdx['Placed Time'] >= 0 ? row[colIdx['Placed Time']] : null;
         const placedTime = placedTimeRaw ? parseWebullDate(placedTimeRaw) : new Date();
@@ -464,7 +468,7 @@ export function parseWebullCSV(text: string): ImportResultExtended {
         const pendingType = orderType?.includes('STOP') ? 'STOP' : 
           orderType?.includes('LIMIT') ? 'LIMIT' : 
           orderType?.includes('MARKET') ? 'MARKET' : 'UNKNOWN';
-        const pendingPrice = limitPrice ?? avgPrice ?? null;
+        const pendingPrice = limitPrice ?? orderPrice ?? avgPrice ?? null;
         
         if (pendingSymbol && pendingSide && placedTime) {
           pendingOrders.push({

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { ImportResultExtended } from '../../engine/types';
 import { buildTrades } from '../../engine/tradesBuilder';
 import { Card, Badge, Button } from '../ui';
@@ -18,12 +18,52 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
   const hasErrors = result.errors.length > 0;
   const hasWarnings = result.warnings.length > 0;
 
-  const skippedRows = result.skippedRows ?? [];
+  const skippedRows = useMemo(() => result.skippedRows ?? [], [result.skippedRows]);
   const hasSkipped = skippedRows.length > 0;
 
   const pendingOrders = result.pendingOrders ?? [];
 
   const detectedFormat = result.detectedFormat ?? 'unknown';
+
+  const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
+
+  useEffect(() => {
+    setReviewAcknowledged(false);
+  }, [result]);
+
+  const reviewWarnings = useMemo(() => {
+    const warningsSet = new Set<string>();
+    const skippedReasons = skippedRows.flatMap((row) => row.reasons ?? []);
+
+    if (detectedFormat === 'unknown') {
+      warningsSet.add('Format could not be identified. Make sure this is a Webull Orders Records CSV.');
+    }
+    if (result.stats.validFills === 0) {
+      warningsSet.add('0 filled rows parsed. The file may be the wrong report type.');
+    }
+    if (result.stats.symbols.length === 0) {
+      warningsSet.add('No symbols detected. Check that the Symbol column is present and populated.');
+    }
+    if (!result.stats.dateRange) {
+      warningsSet.add('No valid filled dates detected. Verify the Filled Time column.');
+    }
+    if (skippedReasons.some((reason) => reason.toLowerCase().includes('missing symbol'))) {
+      warningsSet.add('Some rows are missing symbols.');
+    }
+    if (skippedReasons.some((reason) => reason.toLowerCase().includes('invalid filled time'))) {
+      warningsSet.add('Some rows have invalid or empty dates.');
+    }
+    if (skippedReasons.some((reason) => reason.toLowerCase().includes('invalid quantity'))) {
+      warningsSet.add('Some rows have malformed share quantities.');
+    }
+    if (skippedReasons.some((reason) => reason.toLowerCase().includes('invalid price'))) {
+      warningsSet.add('Some rows have malformed prices.');
+    }
+
+    return Array.from(warningsSet);
+  }, [detectedFormat, result.stats, skippedRows]);
+
+  const requiresReview = reviewWarnings.length > 0;
 
   const skippedReasonCounts = skippedRows.reduce<Record<string, number>>((acc, row) => {
     const reasons = row.reasons && row.reasons.length > 0 ? row.reasons : ['Unspecified reason'];
@@ -208,6 +248,26 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
         </div>
       )}
 
+      {requiresReview && (
+        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-100">
+          <p className="text-sm font-semibold text-amber-200 mb-2">Review required before import</p>
+          <ul className="list-disc list-inside space-y-1">
+            {reviewWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+          <label className="mt-3 flex items-start gap-2 text-xs text-amber-100">
+            <input
+              type="checkbox"
+              checked={reviewAcknowledged}
+              onChange={(event) => setReviewAcknowledged(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-amber-200/60 bg-transparent text-amber-200 focus:ring-2 focus:ring-amber-400/70"
+            />
+            I reviewed the warnings and want to continue.
+          </label>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/10">
         <Button variant="secondary" onClick={handleDownloadReport} disabled={isProcessing}>
           Download Import Report
@@ -215,7 +275,12 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
         <Button variant="secondary" onClick={onCancel} disabled={isProcessing}>
           Cancel
         </Button>
-        <Button onClick={onConfirm} disabled={!result.success || isProcessing} loading={isProcessing} className="flex-1">
+        <Button
+          onClick={onConfirm}
+          disabled={!result.success || isProcessing || (requiresReview && !reviewAcknowledged)}
+          loading={isProcessing}
+          className="flex-1"
+        >
           Import {result.stats.validFills} Fills
         </Button>
       </div>

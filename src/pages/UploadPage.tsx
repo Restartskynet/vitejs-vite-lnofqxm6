@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboard } from '../stores/dashboardStore';
 import { Page, Section } from '../components/layout';
@@ -25,6 +25,73 @@ const scanSteps: ScanStep[] = [
   { stage: 'Summarizing', detail: 'Final snapshot' },
 ];
 
+type BrokerageGuide = {
+  value: string;
+  label: string;
+  steps: string[];
+  comingSoon?: boolean;
+};
+
+const brokerageGuides: BrokerageGuide[] = [
+  {
+    value: 'webull',
+    label: 'Webull',
+    steps: [
+      'Open Webull on desktop and go to Account → Documents.',
+      'Choose Orders Records and export the CSV for the desired date range.',
+      'Keep default columns (especially Filled, Avg Price, and Filled Time).',
+    ],
+  },
+  {
+    value: 'robinhood',
+    label: 'Robinhood',
+    steps: [
+      'Open Robinhood on web and navigate to Account → Reports & Statements.',
+      'Select the “Trades” or “Order History” export (CSV).',
+      'Confirm the file includes symbol, side, quantity, price, and timestamps.',
+    ],
+  },
+  {
+    value: 'fidelity',
+    label: 'Fidelity',
+    steps: [
+      'Visit Fidelity.com → Accounts & Trade → Statements.',
+      'Use the “Trade History” download and export as CSV.',
+      'Ensure fills include symbol, side, quantity, price, and execution time.',
+    ],
+  },
+  {
+    value: 'schwab',
+    label: 'Charles Schwab',
+    steps: [
+      'Log in to Schwab → Accounts → History.',
+      'Filter by Trades and export the CSV.',
+      'Verify the export includes side, quantity, price, and execution time.',
+    ],
+  },
+  {
+    value: 'etrade',
+    label: 'E*TRADE',
+    steps: [
+      'Go to E*TRADE → Accounts → Transactions.',
+      'Filter to Trades and use Download → CSV.',
+      'Confirm the file includes symbol, side, shares, price, and time.',
+    ],
+  },
+  {
+    value: 'ibkr',
+    label: 'Interactive Brokers (coming soon)',
+    steps: [],
+    comingSoon: true,
+  },
+  {
+    value: 'td',
+    label: 'TD Ameritrade (coming soon)',
+    steps: [],
+    comingSoon: true,
+  },
+];
+
 export function UploadPage() {
   const navigate = useNavigate();
   const { state, actions } = useDashboard();
@@ -37,7 +104,15 @@ export function UploadPage() {
   const [importMode, setImportMode] = useState<ImportMode>('merge');
   const [scanIndex, setScanIndex] = useState(0);
   const [scanPercent, setScanPercent] = useState(0);
+  const [selectedBrokerage, setSelectedBrokerage] = useState<string>(brokerageGuides[0]?.value ?? 'webull');
   const timersRef = useRef<number[]>([]);
+
+  const stepNames: UploadStep[] = ['upload', 'preview', 'confirm', 'success'];
+  const currentStepIndex = stepNames.indexOf(step);
+  const activeBrokerage = useMemo(
+    () => brokerageGuides.find((guide) => guide.value === selectedBrokerage) ?? brokerageGuides[0],
+    [selectedBrokerage]
+  );
 
   useEffect(() => {
     return () => {
@@ -100,6 +175,7 @@ export function UploadPage() {
     runScanSequence(() => {
       actions.importFills(
         importResult.fills,
+        importResult.pendingOrders ?? [],
         {
           fileName: file.name,
           rowCount: importResult.stats.totalRows,
@@ -130,38 +206,59 @@ export function UploadPage() {
 
   return (
     <Page title="Import Trades" subtitle="Local-only CSV import for Restart’s Trading Co-Pilot">
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {['Upload', 'Preview', 'Confirm', 'Success'].map((label, i) => {
-          const stepNames: UploadStep[] = ['upload', 'preview', 'confirm', 'success'];
-          const isActive = step === stepNames[i];
-          const isPast = stepNames.indexOf(step) > i;
+      <div className="mb-8">
+        <div className="sm:hidden rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-ink-muted">
+            <span>Step</span>
+            <span>{currentStepIndex + 1} of {stepNames.length}</span>
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-[rgb(var(--accent-info))]">
+              {['Upload', 'Preview', 'Confirm', 'Success'][currentStepIndex]}
+            </p>
+            <span className="text-xs text-ink-muted">{scanSteps[currentStepIndex]?.stage ?? 'Review'}</span>
+          </div>
+          <div className="mt-3 h-1.5 w-full rounded-full bg-white/10">
+            <div
+              className="h-1.5 rounded-full bg-[rgb(var(--accent-info))] transition-all"
+              style={{ width: `${((currentStepIndex + 1) / stepNames.length) * 100}%` }}
+              aria-current="step"
+            />
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center justify-center gap-2">
+          {['Upload', 'Preview', 'Confirm', 'Success'].map((label, i) => {
+            const isActive = step === stepNames[i];
+            const isPast = stepNames.indexOf(step) > i;
 
-          return (
-            <div key={label} className="flex items-center">
-              {i > 0 && <div className={`w-8 h-px mx-2 ${isPast ? 'bg-[rgb(var(--accent-info))]' : 'bg-white/20'}`} />}
-              <div
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
-                  isActive
-                    ? 'bg-[rgb(var(--accent-info)/0.2)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.4)]'
+            return (
+              <div key={label} className="flex items-center">
+                {i > 0 && <div className={`w-8 h-px mx-2 ${isPast ? 'bg-[rgb(var(--accent-info))]' : 'bg-white/20'}`} />}
+                <div
+                  aria-current={isActive ? 'step' : undefined}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                    isActive
+                      ? 'bg-[rgb(var(--accent-info)/0.28)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.6)] shadow-[0_0_0_1px_rgb(var(--accent-glow)/0.45),0_0_36px_rgb(var(--accent-glow)/0.4),inset_0_0_22px_rgb(var(--accent-glow)/0.22)]'
                     : isPast
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                       : 'bg-white/5 text-ink-muted border-white/10'
-                }`}
-              >
-                {isPast ? (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <span className="w-5 h-5 rounded-full border border-current flex items-center justify-center text-xs">
-                    {i + 1}
-                  </span>
-                )}
-                {label}
+                  }`}
+                >
+                  {isPast ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <span className="w-5 h-5 rounded-full border border-current flex items-center justify-center text-xs">
+                      {i + 1}
+                    </span>
+                  )}
+                  <span className={isActive ? 'text-[rgb(var(--accent-info))]' : undefined}>{label}</span>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {step === 'upload' && (
@@ -198,6 +295,39 @@ export function UploadPage() {
                   <li>Keep all default columns to preserve audit trail fidelity.</li>
                   <li>No network calls required — import runs entirely on-device.</li>
                 </ul>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="brokerage-guide" className="text-xs uppercase tracking-[0.2em] text-ink-muted">
+                    Brokerage export guide
+                  </label>
+                  <select
+                    id="brokerage-guide"
+                    value={selectedBrokerage}
+                    onChange={(e) => setSelectedBrokerage(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgb(var(--accent-info)/0.6)]"
+                  >
+                    {brokerageGuides.map((guide) => (
+                      <option key={guide.value} value={guide.value} disabled={guide.comingSoon}>
+                        {guide.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                  {activeBrokerage?.comingSoon ? (
+                    <p className="text-xs text-ink-muted">
+                      Export guidance for {activeBrokerage.label.replace(' (coming soon)', '')} is in progress.
+                      We’ll add step-by-step coverage in a future update.
+                    </p>
+                  ) : (
+                    <ol className="space-y-1 text-xs text-ink-muted list-decimal list-inside">
+                      {activeBrokerage?.steps.map((stepText) => (
+                        <li key={stepText}>{stepText}</li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
               </div>
             </Card>
 
@@ -284,6 +414,17 @@ export function UploadPage() {
               </div>
             </div>
           )}
+
+          {preview.detectedFormat === 'unknown' && (
+            <div className="mb-6 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-xs text-amber-100">
+              This file doesn’t look like a Webull Orders Records export yet. Double-check you downloaded the Orders Records
+              CSV and kept all default columns before continuing.
+            </div>
+          )}
+
+          <div className="mb-6 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-ink-muted">
+            Merge mode dedupes identical fills. Importing the same CSV twice will skip duplicates automatically.
+          </div>
 
           <CSVPreview preview={preview} />
 

@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Header } from './Header';
 import { MobileNavigation } from './Navigation';
 import { cn } from '../../lib/utils';
@@ -21,7 +22,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute inset-0 synthwave-backdrop" />
         <div className="absolute inset-0 synthwave-grid motion-safe:grid-ambient opacity-70" />
@@ -31,7 +32,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
         <div className="absolute inset-0 opacity-[0.08] mix-blend-screen bg-[linear-gradient(transparent_0%,_rgba(255,255,255,0.08)_50%,_transparent_100%)]" />
       </div>
       <Header />
-      <main className={cn('max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative pb-24 sm:pb-8', className)}>
+      <main className={cn('max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative pb-32 sm:pb-8 flex-1', className)}>
         {children}
       </main>
       <footer className="border-t border-white/[0.06] mt-12 py-6 hidden sm:block">
@@ -41,7 +42,12 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
               <p className="text-white font-semibold">Restart’s Trading Co-Pilot</p>
               <p className="text-xs text-ink-muted">Local-first • Deterministic • Audit-ready</p>
             </div>
-            <p className="text-xs text-ink-muted">Restart’s Trading Co-Pilot reinforces risk process. Not financial advice.</p>
+            <div className="flex flex-col items-start lg:items-end gap-1 text-xs text-ink-muted">
+              <p>Restart’s Trading Co-Pilot reinforces risk process. Not financial advice.</p>
+              <Link to="/legal" className="text-xs text-ink-muted hover:text-white transition-colors">
+                Legal &amp; Data Disclaimer
+              </Link>
+            </div>
           </div>
         </div>
       </footer>

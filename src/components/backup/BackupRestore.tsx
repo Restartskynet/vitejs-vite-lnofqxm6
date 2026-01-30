@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button, Badge } from '../ui';
 import { Modal } from '../ui/Modal';
-import type { PersistedFill, PersistedData, PersistedAdjustment, ImportHistoryEntry, Settings } from '../../types';
+import type { PersistedFill, PersistedData, PersistedAdjustment, ImportHistoryEntry, Settings, PersistedPendingOrder } from '../../types';
 import { CURRENT_SCHEMA_VERSION } from '../../types';
 
 interface BackupRestoreProps {
@@ -9,10 +9,11 @@ interface BackupRestoreProps {
   settings: Settings;
   importHistory: ImportHistoryEntry[];
   adjustments: PersistedAdjustment[];
+  pendingOrders: PersistedPendingOrder[];
   onImport: (data: PersistedData, mode: 'replace' | 'merge') => void;
 }
 
-export function BackupRestore({ fills, settings, importHistory, adjustments, onImport }: BackupRestoreProps) {
+export function BackupRestore({ fills, settings, importHistory, adjustments, pendingOrders, onImport }: BackupRestoreProps) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importMode, setImportMode] = useState<'replace' | 'merge'>('merge');
   const [importData, setImportData] = useState<PersistedData | null>(null);
@@ -33,6 +34,7 @@ export function BackupRestore({ fills, settings, importHistory, adjustments, onI
       },
       importHistory,
       adjustments,
+      pendingOrders,
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });

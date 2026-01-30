@@ -1,11 +1,12 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useState, type ReactNode } from 'react';
-import type { Fill, Trade, DailyEquity, ImportResult, StrategyConfig } from '../engine/types';
-import type { Metrics, Settings, UploadStatus, CurrentRisk, ImportHistoryEntry, PersistedFill, PersistedData, PersistedAdjustment } from '../types';
+import type { Fill, Trade, DailyEquity, ImportResult, StrategyConfig, PendingOrder } from '../engine/types';
+import type { Metrics, Settings, UploadStatus, CurrentRisk, ImportHistoryEntry, PersistedFill, PersistedData, PersistedAdjustment, PersistedPendingOrder } from '../types';
 import { DEFAULT_SETTINGS, EMPTY_METRICS, EMPTY_CURRENT_RISK, CURRENT_SCHEMA_VERSION, DEFAULT_STRATEGY } from '../types';
 import { buildTrades, calculateMetrics } from '../engine/tradesBuilder';
 import { getCurrentRisk, calculateDailyEquity, calculateMaxDrawdown } from '../engine/riskEngine';
 import { loadPersistedData, savePersistedData, clearPersistedData, createEmptyPersistedData, isIndexedDBAvailable } from '../lib/db';
-import { generateFillFingerprint } from '../lib/hash';
+import { generateFillFingerprint, generatePendingOrderFingerprint } from '../lib/hash';
 
 // ============================================================================
 // STATE INTERFACE
@@ -34,6 +35,9 @@ interface DashboardState {
   // Import history
   importHistory: ImportHistoryEntry[];
 
+  // Pending orders
+  pendingOrders: PendingOrder[];
+
   // Derived data
   trades: Trade[];
   dailyEquity: DailyEquity[];
@@ -59,6 +63,7 @@ const initialState: DashboardState = {
   fillFingerprints: new Set(),
   importMetadata: null,
   importHistory: [],
+  pendingOrders: [],
   trades: [],
   dailyEquity: [],
   currentRisk: EMPTY_CURRENT_RISK,
@@ -82,7 +87,7 @@ type Action =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_UPLOAD_STATUS'; payload: UploadStatus }
   | { type: 'SET_UPLOAD_RESULT'; payload: ImportResult | null }
-  | { type: 'IMPORT_FILLS'; payload: { fills: Fill[]; metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }; mode: 'merge' | 'replace' } }
+  | { type: 'IMPORT_FILLS'; payload: { fills: Fill[]; pendingOrders: PendingOrder[]; metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }; mode: 'merge' | 'replace' } }
   | { type: 'ADD_IMPORT_HISTORY'; payload: ImportHistoryEntry }
   | { type: 'CLEAR_IMPORT_HISTORY' }
   | { type: 'PROCESS_DATA' }
@@ -94,7 +99,7 @@ type Action =
   | { type: 'SET_STRATEGY'; payload: StrategyConfig }
   | { type: 'IMPORT_BACKUP'; payload: { data: PersistedData; mode: 'replace' | 'merge' } }
   | { type: 'CLEAR_DATA' }
-  | { type: 'HYDRATE'; payload: { fills: Fill[]; fingerprints: string[]; settings: Settings; importHistory: ImportHistoryEntry[]; adjustments: Adjustment[]; strategy?: StrategyConfig } }
+  | { type: 'HYDRATE'; payload: { fills: Fill[]; fingerprints: string[]; settings: Settings; importHistory: ImportHistoryEntry[]; adjustments: Adjustment[]; pendingOrders: PendingOrder[]; strategy?: StrategyConfig } }
   | { type: 'SET_HYDRATED' }
   | { type: 'SET_SCHEMA_WARNING'; payload: string | null };
 
@@ -121,10 +126,11 @@ function recomputeDerivedData(
   fills: Fill[], 
   startingEquity: number, 
   adjustments: Adjustment[] = [],
-  strategy: StrategyConfig = DEFAULT_STRATEGY
+  strategy: StrategyConfig = DEFAULT_STRATEGY,
+  pendingOrders: PendingOrder[] = []
 ) {
   // buildTrades returns { trades, riskTimeline } - MUST destructure!
-  const buildResult = buildTrades(fills, startingEquity);
+  const buildResult = buildTrades(fills, startingEquity, pendingOrders);
   
   // Extract the trades array from the result
   let tradesArray: Trade[];
@@ -184,12 +190,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       return { ...state, uploadResult: action.payload };
 
     case 'IMPORT_FILLS': {
-      const { fills: newFills, metadata, mode } = action.payload;
+      const { fills: newFills, pendingOrders: newPendingOrders, metadata, mode } = action.payload;
       
       let mergedFills: Fill[];
       let newFingerprints: Set<string>;
       let addedCount = 0;
       let skippedCount = 0;
+      let mergedPendingOrders: PendingOrder[] = [];
       
       if (mode === 'replace') {
         // Replace mode: clear existing and use new
@@ -201,6 +208,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           newFingerprints.add(fp);
         });
         addedCount = newFills.length;
+        mergedPendingOrders = [...newPendingOrders];
       } else {
         // Merge mode: dedupe based on fingerprints
         mergedFills = [...state.fills];
@@ -218,6 +226,38 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
             skippedCount++;
           }
         }
+
+        const pendingFingerprintSet = new Set(
+          state.pendingOrders.map((po) =>
+            generatePendingOrderFingerprint(
+              po.symbol,
+              po.side,
+              po.quantity,
+              po.price,
+              po.stopPrice,
+              po.limitPrice,
+              po.placedTime,
+              po.type
+            )
+          )
+        );
+        mergedPendingOrders = [...state.pendingOrders];
+        newPendingOrders.forEach((po) => {
+          const fp = generatePendingOrderFingerprint(
+            po.symbol,
+            po.side,
+            po.quantity,
+            po.price,
+            po.stopPrice,
+            po.limitPrice,
+            po.placedTime,
+            po.type
+          );
+          if (!pendingFingerprintSet.has(fp)) {
+            mergedPendingOrders.push(po);
+            pendingFingerprintSet.add(fp);
+          }
+        });
         
         // Sort by date with stable row order
         mergedFills.sort((a, b) => {
@@ -228,7 +268,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       }
       
       // Recompute derived data with adjustments
-      const derived = recomputeDerivedData(mergedFills, state.settings.startingEquity, state.adjustments, state.strategy);
+      const derived = recomputeDerivedData(
+        mergedFills,
+        state.settings.startingEquity,
+        state.adjustments,
+        state.strategy,
+        mergedPendingOrders
+      );
       
       // Create import history entry
       const historyEntry: ImportHistoryEntry = {
@@ -258,6 +304,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           fillCount: metadata.fillCount,
           dateRange: metadata.dateRange,
         },
+        pendingOrders: mergedPendingOrders,
         importHistory: [historyEntry, ...state.importHistory].slice(0, 50),
         ...derived,
         hasData: mergedFills.length > 0,
@@ -278,7 +325,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       };
 
     case 'PROCESS_DATA': {
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, state.adjustments, state.strategy);
+      const derived = recomputeDerivedData(
+        state.fills,
+        state.settings.startingEquity,
+        state.adjustments,
+        state.strategy,
+        state.pendingOrders
+      );
       return { ...state, ...derived };
     }
 
@@ -286,7 +339,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       const newSettings = { ...state.settings, ...action.payload };
       
       if (action.payload.startingEquity && state.hasData) {
-        const derived = recomputeDerivedData(state.fills, newSettings.startingEquity, state.adjustments, state.strategy);
+        const derived = recomputeDerivedData(
+          state.fills,
+          newSettings.startingEquity,
+          state.adjustments,
+          state.strategy,
+          state.pendingOrders
+        );
         return { ...state, settings: newSettings, ...derived };
       }
       
@@ -295,7 +354,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
 
     case 'ADD_ADJUSTMENT': {
       const newAdjustments = [...state.adjustments, action.payload];
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, newAdjustments, state.strategy);
+      const derived = recomputeDerivedData(
+        state.fills,
+        state.settings.startingEquity,
+        newAdjustments,
+        state.strategy,
+        state.pendingOrders
+      );
       return { ...state, adjustments: newAdjustments, ...derived };
     }
 
@@ -303,23 +368,47 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       const newAdjustments = state.adjustments.map((a) =>
         a.id === action.payload.id ? action.payload : a
       );
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, newAdjustments, state.strategy);
+      const derived = recomputeDerivedData(
+        state.fills,
+        state.settings.startingEquity,
+        newAdjustments,
+        state.strategy,
+        state.pendingOrders
+      );
       return { ...state, adjustments: newAdjustments, ...derived };
     }
 
     case 'DELETE_ADJUSTMENT': {
       const newAdjustments = state.adjustments.filter((a) => a.id !== action.payload);
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, newAdjustments, state.strategy);
+      const derived = recomputeDerivedData(
+        state.fills,
+        state.settings.startingEquity,
+        newAdjustments,
+        state.strategy,
+        state.pendingOrders
+      );
       return { ...state, adjustments: newAdjustments, ...derived };
     }
 
     case 'SET_ADJUSTMENTS': {
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, action.payload, state.strategy);
+      const derived = recomputeDerivedData(
+        state.fills,
+        state.settings.startingEquity,
+        action.payload,
+        state.strategy,
+        state.pendingOrders
+      );
       return { ...state, adjustments: action.payload, ...derived };
     }
 
     case 'SET_STRATEGY': {
-      const derived = recomputeDerivedData(state.fills, state.settings.startingEquity, state.adjustments, action.payload);
+      const derived = recomputeDerivedData(
+        state.fills,
+        state.settings.startingEquity,
+        state.adjustments,
+        action.payload,
+        state.pendingOrders
+      );
       return { ...state, strategy: action.payload, ...derived };
     }
 
@@ -335,11 +424,17 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           stopPrice: pf.stopPrice ?? null,
         }));
         
+        const pendingOrders = (data.pendingOrders || []).map((po) => ({
+          ...po,
+          placedTime: new Date(po.placedTime),
+        }));
+
         const derived = recomputeDerivedData(
           fills, 
           data.settings?.startingEquity || state.settings.startingEquity,
           data.adjustments || [],
-          state.strategy
+          state.strategy,
+          pendingOrders
         );
         
         return {
@@ -349,6 +444,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           settings: data.settings || state.settings,
           importHistory: data.importHistory || [],
           adjustments: data.adjustments || [],
+          pendingOrders,
           ...derived,
           hasData: fills.length > 0,
         };
@@ -357,6 +453,20 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
         const existingFps = new Set(state.fillFingerprints);
         const existingHistoryIds = new Set(state.importHistory.map(h => h.id));
         const existingAdjIds = new Set(state.adjustments.map(a => a.id));
+        const existingPendingFps = new Set(
+          state.pendingOrders.map((po) =>
+            generatePendingOrderFingerprint(
+              po.symbol,
+              po.side,
+              po.quantity,
+              po.price,
+              po.stopPrice,
+              po.limitPrice,
+              po.placedTime,
+              po.type
+            )
+          )
+        );
         
         // Merge fills
         const newFills = data.fills
@@ -385,12 +495,38 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
         // Merge adjustments
         const newAdjustments = (data.adjustments || []).filter(a => !existingAdjIds.has(a.id));
         const mergedAdjustments = [...state.adjustments, ...newAdjustments];
+
+        const newPendingOrders = (data.pendingOrders || [])
+          .map((po) => ({
+            ...po,
+            placedTime: new Date(po.placedTime),
+          }))
+          .filter((po) => {
+            const fp = generatePendingOrderFingerprint(
+              po.symbol,
+              po.side,
+              po.quantity,
+              po.price,
+              po.stopPrice,
+              po.limitPrice,
+              po.placedTime,
+              po.type
+            );
+            if (existingPendingFps.has(fp)) {
+              return false;
+            }
+            existingPendingFps.add(fp);
+            return true;
+          });
+
+        const mergedPendingOrders = [...state.pendingOrders, ...newPendingOrders];
         
         const derived = recomputeDerivedData(
           mergedFills, 
           state.settings.startingEquity,
           mergedAdjustments,
-          state.strategy
+          state.strategy,
+          mergedPendingOrders
         );
         
         return {
@@ -399,6 +535,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           fillFingerprints: mergedFps,
           importHistory: mergedHistory,
           adjustments: mergedAdjustments,
+          pendingOrders: mergedPendingOrders,
           ...derived,
           hasData: mergedFills.length > 0,
         };
@@ -416,7 +553,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
     }
 
     case 'HYDRATE': {
-      const { fills, fingerprints, settings, importHistory, adjustments, strategy } = action.payload;
+      const { fills, fingerprints, settings, importHistory, adjustments, pendingOrders, strategy } = action.payload;
       
       // Convert ISO strings back to Date objects
       const hydratedFills = fills.map(f => ({
@@ -427,7 +564,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       }));
       
       const hydratedStrategy = strategy || state.strategy;
-      const derived = recomputeDerivedData(hydratedFills, settings.startingEquity, adjustments, hydratedStrategy);
+      const derived = recomputeDerivedData(
+        hydratedFills,
+        settings.startingEquity,
+        adjustments,
+        hydratedStrategy,
+        pendingOrders
+      );
       
       return {
         ...state,
@@ -436,6 +579,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
         settings,
         importHistory,
         adjustments,
+        pendingOrders,
         strategy: hydratedStrategy,
         ...derived,
         hasData: hydratedFills.length > 0,
@@ -455,6 +599,9 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
   }
 }
 
+export const initialDashboardState = initialState;
+export { dashboardReducer };
+
 // ============================================================================
 // CONTEXT
 // ============================================================================
@@ -464,7 +611,7 @@ interface DashboardContextValue {
   actions: {
     setUploadStatus: (status: UploadStatus) => void;
     setUploadResult: (result: ImportResult | null) => void;
-    importFills: (fills: Fill[], metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }, mode: 'merge' | 'replace') => Promise<void>;
+    importFills: (fills: Fill[], pendingOrders: PendingOrder[], metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null }, mode: 'merge' | 'replace') => Promise<void>;
     clearImportHistory: () => void;
     updateSettings: (settings: Partial<Settings>) => void;
     addAdjustment: (adjustment: Adjustment) => void;
@@ -528,6 +675,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               settings: data.settings,
               importHistory: data.importHistory,
               adjustments: data.adjustments,
+              pendingOrders: (data.pendingOrders || []).map((po) => ({
+                ...po,
+                placedTime: new Date(po.placedTime),
+              })),
               strategy: (data as PersistedData & { strategy?: StrategyConfig }).strategy,
             },
           });
@@ -565,6 +716,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           stopPrice: f.stopPrice ?? null,
         }));
 
+        const persistedPendingOrders: PersistedPendingOrder[] = state.pendingOrders.map((po) => ({
+          symbol: po.symbol,
+          side: po.side,
+          price: po.price,
+          stopPrice: po.stopPrice,
+          limitPrice: po.limitPrice,
+          quantity: po.quantity,
+          placedTime: po.placedTime.toISOString(),
+          type: po.type,
+        }));
+
         const dataToSave: PersistedData & { strategy?: StrategyConfig } = {
           schemaVersion: CURRENT_SCHEMA_VERSION,
           fills: persistedFills,
@@ -572,6 +734,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           settings: state.settings,
           importHistory: state.importHistory,
           adjustments: state.adjustments,
+          pendingOrders: persistedPendingOrders,
           strategy: state.strategy,
         };
 
@@ -583,7 +746,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }, 1000);
 
     return () => clearTimeout(timeout);
-  }, [state.fills, state.settings, state.importHistory, state.adjustments, state.strategy, state.isHydrated, state.isLoading, state.fillFingerprints]);
+  }, [state.fills, state.settings, state.importHistory, state.adjustments, state.strategy, state.pendingOrders, state.isHydrated, state.isLoading, state.fillFingerprints]);
 
   // Actions
   const setUploadStatus = useCallback((status: UploadStatus) => {
@@ -596,10 +759,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const importFills = useCallback(async (
     fills: Fill[],
+    pendingOrders: PendingOrder[],
     metadata: { fileName: string; rowCount: number; fillCount: number; dateRange: { start: string; end: string } | null },
     mode: 'merge' | 'replace'
   ) => {
-    dispatch({ type: 'IMPORT_FILLS', payload: { fills, metadata, mode } });
+    dispatch({ type: 'IMPORT_FILLS', payload: { fills, pendingOrders, metadata, mode } });
   }, []);
 
   const clearImportHistory = useCallback(() => {
@@ -694,6 +858,7 @@ export function useDashboardState() {
     
     // Import history
     importHistory: state.importHistory,
+    pendingOrders: state.pendingOrders,
     
     // Derived data
     trades: state.trades,

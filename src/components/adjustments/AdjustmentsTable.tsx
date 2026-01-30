@@ -50,7 +50,7 @@ export function AdjustmentsTable({ adjustments, onAdd, onUpdate, onDelete }: Adj
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="text-lg font-semibold text-white">Manual Adjustments</h3>
           <p className="text-xs text-slate-500">Track deposits, withdrawals, and fees</p>
@@ -66,7 +66,7 @@ export function AdjustmentsTable({ adjustments, onAdd, onUpdate, onDelete }: Adj
 
       {/* Summary */}
       {adjustments.length > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider">Net</p>
             <p className={cn('text-lg font-bold', netAdjustment >= 0 ? 'text-emerald-400' : 'text-red-400')}>
