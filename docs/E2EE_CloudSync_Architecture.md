@@ -1,4 +1,4 @@
-# Phase 4 — E2EE Cloud Sync Architecture & Decisions (Source of Truth)
+# E2EE Cloud Sync Architecture & Decisions (Source of Truth)
 
 This document is the **source of truth** for Phase 4 implementation decisions: **accounts + end-to-end encrypted (E2EE) cloud sync + multi-device**.
 
