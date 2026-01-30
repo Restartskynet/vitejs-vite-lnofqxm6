@@ -59,7 +59,11 @@ jobs:
 
       - name: Axe audits
         run: |
-          export CHROMEDRIVER_PATH="./node_modules/.cache/selenium/chromedriver/linux64/chromedriver"
+          export CHROMEDRIVER_PATH="$(find "$HOME/.browser-driver-manager" -type f -name chromedriver | head -n 1)"
+          if [ -z "$CHROMEDRIVER_PATH" ]; then
+            echo "ChromeDriver not found in browser-driver-manager cache."
+            exit 1
+          fi
           npx axe http://127.0.0.1:4173/ --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-dashboard.json
           npx axe http://127.0.0.1:4173/upload --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-upload.json
           npx axe http://127.0.0.1:4173/trades --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-trades.json
