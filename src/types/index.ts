@@ -149,5 +149,6 @@ export type {
   PersistedFill,
   PersistedSettings,
   PersistedAdjustment,
+  PersistedPendingOrder,
 } from './importHistory';
 export { CURRENT_SCHEMA_VERSION } from './importHistory';

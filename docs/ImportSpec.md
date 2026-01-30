@@ -44,7 +44,12 @@ The importer reads all data rows then applies filters:
 
 ### 4.1 Status handling
 - Only rows with `Status = "Filled"` are eligible to become fills.
-- All other statuses are ignored.
+- All other statuses are ignored for fills **but** pending/working/open rows are tracked for stop/target inference.
+- Orders Records exports may place the pending order price in a **Price** column (distinct from Avg Price).
+  - Pending order price parsing priority:
+    1) Limit Price (if present)
+    2) Price (Orders Records)
+    3) Avg Price (fallback)
 
 ### 4.2 Partially Filled (explicit v1 policy)
 Rows with `Status = "Partially Filled"` are:
@@ -58,6 +63,12 @@ Rationale:
 
 ### 4.3 Cancelled / Rejected / etc
 Ignored with no special handling, unless counts are large enough to be helpful to report.
+
+### 4.4 Pending order tracking (Orders Records)
+- Pending/working/open rows are captured as **PendingOrder** records.
+- These records do **not** create fills, but are used to infer:
+  - stop price for active trades
+  - pending exit/target levels when unambiguous
 
 ## 5. Normalization Rules
 
@@ -146,3 +157,9 @@ Warnings may include:
 - No partial fill modeling
 - No corporate action handling
 - No live prices, no market data APIs
+
+## 9. Duplicate / Re-import Behavior
+
+- Merge mode skips duplicate fills using deterministic fingerprints.
+- Replace mode clears all existing data before importing.
+- Re-importing the same CSV in merge mode skips duplicates and keeps prior pending orders unless new ones are detected.

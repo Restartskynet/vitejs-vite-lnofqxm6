@@ -40,6 +40,34 @@ export function hashString(str: string): string {
   /**
    * Generate a unique ID for a fill based on its fingerprint
    */
-  export function generateFillId(fingerprint: string): string {
-    return `fill_${fingerprint}`;
-  }
+export function generateFillId(fingerprint: string): string {
+  return `fill_${fingerprint}`;
+}
+
+/**
+ * Generate a deterministic fingerprint for a pending order.
+ * Format: symbol|side|qty|price|stop|limit|timestamp|type
+ */
+export function generatePendingOrderFingerprint(
+  symbol: string,
+  side: string,
+  quantity: number,
+  price: number | null,
+  stopPrice: number | null,
+  limitPrice: number | null,
+  placedTime: Date,
+  type: string
+): string {
+  const normalized = [
+    symbol.toUpperCase().trim(),
+    side.toUpperCase().trim(),
+    quantity.toFixed(6),
+    (price ?? 0).toFixed(6),
+    (stopPrice ?? 0).toFixed(6),
+    (limitPrice ?? 0).toFixed(6),
+    placedTime.toISOString(),
+    type.toUpperCase().trim(),
+  ].join('|');
+
+  return hashString(normalized);
+}

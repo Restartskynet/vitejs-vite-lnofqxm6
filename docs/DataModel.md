@@ -64,6 +64,26 @@ Invariants:
 
 ---
 
+## PendingOrder
+
+Pending orders represent exit-side orders that have not filled (e.g., working stop/limit).
+
+Core fields (conceptual):
+- `symbol`
+- `side`: `BUY` | `SELL`
+- `price` (nullable)
+- `stopPrice` (nullable)
+- `limitPrice` (nullable)
+- `quantity`
+- `placedTime` (Date)
+- `type`: `STOP` | `LIMIT` | `MARKET` | `UNKNOWN`
+
+Invariants:
+- Pending orders never become fills directly.
+- Pending orders are used only for inference of `stopPrice` / `pendingExit` on ACTIVE trades.
+
+---
+
 ## Strategy & risk state (Restart Throttle)
 
 The Restart strategy produces a **risk state** timeline:
@@ -130,8 +150,8 @@ If adjustments exist, the equity model must clearly define:
 Any exported backup/import format must include:
 - `schemaVersion` (number)
 - `exportedAt` ISO string
+ - pending orders (if present) must include ISO timestamps and nullable price fields
 
 Migration rules:
 - older versions must be migrated in-memory before persistence
 - newer/unknown versions must fail safe with a clear error message
-

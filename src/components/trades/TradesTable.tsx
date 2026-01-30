@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Trade } from '../../engine/types';
 import { Card, Badge, SearchInput } from '../ui';
 import { formatMoney, cn } from '../../lib/utils';
@@ -19,6 +19,8 @@ export function TradesTable({ trades, className }: TradesTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showActive, setShowActive] = useState(true);
   const [showClosed, setShowClosed] = useState(true);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(5);
 
   // Filter and sort trades
   const filteredTrades = useMemo(() => {
@@ -63,6 +65,25 @@ export function TradesTable({ trades, className }: TradesTableProps) {
     
     return result;
   }, [trades, search, sortField, sortDirection, showActive, showClosed]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [search, sortField, sortDirection, showActive, showClosed]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTrades.length / pageSize));
+  const currentPage = Math.min(page, totalPages - 1);
+  const startIdx = currentPage * pageSize;
+  const endIdx = Math.min(startIdx + pageSize, filteredTrades.length);
+
+  useEffect(() => {
+    if (page > totalPages - 1) {
+      setPage(totalPages - 1);
+    }
+  }, [page, totalPages]);
+
+  const paginatedTrades = useMemo(() => {
+    return filteredTrades.slice(startIdx, endIdx);
+  }, [filteredTrades, startIdx, endIdx]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -182,7 +203,7 @@ export function TradesTable({ trades, className }: TradesTableProps) {
             </tr>
           </thead>
           <tbody>
-            {filteredTrades.map((trade) => (
+            {paginatedTrades.map((trade) => (
               <TradeRow 
                 key={trade.id}
                 trade={trade}
@@ -202,7 +223,7 @@ export function TradesTable({ trades, className }: TradesTableProps) {
       
       {/* Mobile List */}
       <div className="md:hidden divide-y divide-white/5">
-        {filteredTrades.map((trade) => (
+        {paginatedTrades.map((trade) => (
           <div key={trade.id} className="p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -229,6 +250,52 @@ export function TradesTable({ trades, className }: TradesTableProps) {
             <p className="text-slate-500">No trades found</p>
           </div>
         )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 py-4 border-t border-white/10">
+        <div className="flex items-center gap-2 text-xs text-ink-muted">
+          <label htmlFor="trades-page-size">Rows per page</label>
+          <select
+            id="trades-page-size"
+            value={pageSize}
+            onChange={(event) => {
+              setPageSize(Number(event.target.value));
+              setPage(0);
+            }}
+            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white focus:outline-none focus:border-sky-500/50"
+          >
+            {[5, 10, 25].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-ink-muted">
+          <span>
+            Page {filteredTrades.length === 0 ? 0 : currentPage + 1} of {filteredTrades.length === 0 ? 0 : totalPages}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={currentPage === 0}
+              className="rounded-md border border-white/10 px-2 py-1 text-xs text-white hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Previous page"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={currentPage >= totalPages - 1}
+              className="rounded-md border border-white/10 px-2 py-1 text-xs text-white hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Next page"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </Card>
   );

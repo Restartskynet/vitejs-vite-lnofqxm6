@@ -61,4 +61,21 @@ describe("Webull parser + trade builder", () => {
     expect(trades[0].side).toBe("SHORT");
     expect(trades[0].realizedPnL).toBe(10);
   });
+
+  test("infers stop from pending Orders Records rows", () => {
+    const csv = [
+      "Name,Symbol,Side,Status,Filled,Total Qty,Price,Avg Price,Time-in-Force,Placed Time,Filled Time",
+      "Ast Spacemobile Inc,ASTS,Buy,Filled,3,3,120.62,120.62,GTC,01/30/2026 09:33:00 EST,01/30/2026 09:33:00 EST",
+      "Ast Spacemobile Inc,ASTS,Sell,Pending,0,3,120.62,,GTC,01/30/2026 09:33:37 EST,",
+    ].join("\n");
+
+    const parsed = parseWebullCSV(csv);
+    const { trades } = buildTrades(parsed.fills, 25000, parsed.pendingOrders);
+
+    expect(parsed.pendingOrders.length).toBe(1);
+    expect(trades.length).toBe(1);
+    expect(trades[0].status).toBe("ACTIVE");
+    expect(trades[0].stopPrice).toBe(120.62);
+    expect(trades[0].inferredStop).toBe(120.62);
+  });
 });

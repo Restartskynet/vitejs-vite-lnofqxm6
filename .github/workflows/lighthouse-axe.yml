@@ -1,0 +1,67 @@
+name: Lighthouse + Axe
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Install audit tools
+        run: npm install -D lighthouse @axe-core/cli
+
+      - name: Start preview server
+        run: npm run preview -- --host 0.0.0.0 --port 4173 &
+
+      - name: Wait for preview
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:4173/ > /dev/null; then
+              echo "Preview server is ready."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Preview server did not start in time."
+          exit 1
+
+      - name: Lighthouse audits
+        run: |
+          npx lighthouse http://127.0.0.1:4173/ --output html --output-path ./lighthouse-dashboard.html
+          npx lighthouse http://127.0.0.1:4173/upload --output html --output-path ./lighthouse-upload.html
+          npx lighthouse http://127.0.0.1:4173/trades --output html --output-path ./lighthouse-trades.html
+          npx lighthouse http://127.0.0.1:4173/settings --output html --output-path ./lighthouse-settings.html
+          npx lighthouse http://127.0.0.1:4173/legal --output html --output-path ./lighthouse-legal.html
+
+      - name: Axe audits
+        run: |
+          npx axe http://127.0.0.1:4173/ --save ./axe-dashboard.json
+          npx axe http://127.0.0.1:4173/upload --save ./axe-upload.json
+          npx axe http://127.0.0.1:4173/trades --save ./axe-trades.json
+          npx axe http://127.0.0.1:4173/settings --save ./axe-settings.json
+          npx axe http://127.0.0.1:4173/legal --save ./axe-legal.json
+
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-reports
+          path: |
+            lighthouse-*.html
+            axe-*.json

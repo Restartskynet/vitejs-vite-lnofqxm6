@@ -113,16 +113,17 @@ import type {
   /**
    * Create empty persisted data structure
    */
-  export function createEmptyPersistedData(settings: PersistedSettings): PersistedData {
-    return {
-      schemaVersion: SCHEMA_VERSION,
-      fills: [],
-      fillFingerprints: [],
-      settings,
-      importHistory: [],
-      adjustments: [],
-    };
-  }
+export function createEmptyPersistedData(settings: PersistedSettings): PersistedData {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    fills: [],
+    fillFingerprints: [],
+    settings,
+    importHistory: [],
+    adjustments: [],
+    pendingOrders: [],
+  };
+}
   
   /**
    * Check if IndexedDB is available

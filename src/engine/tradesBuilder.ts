@@ -128,22 +128,64 @@ function findInferredStop(
   
   let inferredStop: number | null = null;
   let pendingExit: number | null = null;
+  let stopSource: 'user' | 'none' = 'none';
   const exitSide = side === 'LONG' ? 'SELL' : 'BUY';
+
+  const pickStop = (candidate: number, source: 'user' | 'none') => {
+    if (inferredStop === null) {
+      inferredStop = candidate;
+      stopSource = source;
+      return;
+    }
+    if (side === 'LONG') {
+      if (candidate > inferredStop) {
+        inferredStop = candidate;
+        stopSource = source;
+      }
+      return;
+    }
+    if (candidate < inferredStop) {
+      inferredStop = candidate;
+      stopSource = source;
+    }
+  };
+
+  const pickPendingExit = (candidate: number) => {
+    if (pendingExit === null) {
+      pendingExit = candidate;
+      return;
+    }
+    if (side === 'LONG') {
+      if (candidate < pendingExit) pendingExit = candidate;
+      return;
+    }
+    if (candidate > pendingExit) pendingExit = candidate;
+  };
   
   for (const po of relevantPending) {
     if (po.side !== exitSide) continue;
     if (po.type === 'STOP' && po.stopPrice !== null) {
-      inferredStop = po.stopPrice;
+      pickStop(po.stopPrice, 'user');
+      continue;
     }
     if (po.type === 'LIMIT' && po.price !== null) {
-      pendingExit = po.price;
+      pickPendingExit(po.price);
+      continue;
+    }
+    if (po.price !== null) {
+      const isStopCandidate = side === 'LONG' ? po.price <= entryPrice : po.price >= entryPrice;
+      if (isStopCandidate) {
+        pickStop(po.price, 'none');
+      } else {
+        pickPendingExit(po.price);
+      }
     }
   }
   
   return { 
     inferredStop, 
     pendingExit, 
-    stopSource: inferredStop ? 'user' : 'none' 
+    stopSource,
   };
 }
 
