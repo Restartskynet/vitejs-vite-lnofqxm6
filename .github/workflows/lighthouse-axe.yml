@@ -25,10 +25,13 @@ jobs:
         run: npm run build
 
       - name: Install audit tools
-        run: npm install -D lighthouse @axe-core/cli
+        run: npm install -D lighthouse @axe-core/cli browser-driver-manager
 
       - name: Install xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Install ChromeDriver
+        run: npx browser-driver-manager install chrome
 
       - name: Start preview server
         run: npm run preview -- --host 0.0.0.0 --port 4173 &
@@ -56,11 +59,12 @@ jobs:
 
       - name: Axe audits
         run: |
-          npx axe http://127.0.0.1:4173/ --save ./axe-dashboard.json
-          npx axe http://127.0.0.1:4173/upload --save ./axe-upload.json
-          npx axe http://127.0.0.1:4173/trades --save ./axe-trades.json
-          npx axe http://127.0.0.1:4173/settings --save ./axe-settings.json
-          npx axe http://127.0.0.1:4173/legal --save ./axe-legal.json
+          export CHROMEDRIVER_PATH="./node_modules/.cache/selenium/chromedriver/linux64/chromedriver"
+          npx axe http://127.0.0.1:4173/ --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-dashboard.json
+          npx axe http://127.0.0.1:4173/upload --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-upload.json
+          npx axe http://127.0.0.1:4173/trades --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-trades.json
+          npx axe http://127.0.0.1:4173/settings --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-settings.json
+          npx axe http://127.0.0.1:4173/legal --chromedriver-path "$CHROMEDRIVER_PATH" --save ./axe-legal.json
 
       - name: Upload audit artifacts
         uses: actions/upload-artifact@v4
