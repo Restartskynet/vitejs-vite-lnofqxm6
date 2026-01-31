@@ -271,7 +271,7 @@ export function UploadPage() {
                   Local-first import
                 </div>
                 <h3 className="text-lg font-semibold text-white">Drop your Webull Orders Records CSV</h3>
-                <p className="text-xs text-ink-muted">No uploads, no servers — everything stays on this device.</p>
+                <p className="text-xs text-ink-muted">No uploads, no servers, everything stays on this device.</p>
               </div>
               <UploadZone
                 onFileSelect={handleFileSelect}
