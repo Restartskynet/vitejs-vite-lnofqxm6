@@ -296,6 +296,7 @@ html[data-grid='off'] .synthwave-grid {
 
 *::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-thumb {
@@ -305,4 +306,8 @@ html[data-grid='off'] .synthwave-grid {
 
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.table-scrollbar {
+  scrollbar-gutter: stable both-edges;
 }

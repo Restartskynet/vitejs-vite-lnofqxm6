@@ -22,7 +22,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col overflow-x-hidden">
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute inset-0 synthwave-backdrop" />
         <div className="absolute inset-0 synthwave-grid motion-safe:grid-ambient opacity-70" />
@@ -32,7 +32,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
         <div className="absolute inset-0 opacity-[0.08] mix-blend-screen bg-[linear-gradient(transparent_0%,_rgba(255,255,255,0.08)_50%,_transparent_100%)]" />
       </div>
       <Header />
-      <main className={cn('max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative pb-32 sm:pb-8 flex-1', className)}>
+      <main className={cn('max-w-7xl mx-auto w-full min-w-0 px-4 sm:px-6 py-6 sm:py-8 relative pb-32 sm:pb-8 flex-1', className)}>
         {children}
       </main>
       <footer className="border-t border-white/[0.06] mt-12 py-6 hidden sm:block">
@@ -60,14 +60,14 @@ export function Page({ title, subtitle, action, children, className }: { title?:
   return (
     <div className={cn('space-y-6 motion-safe:animate-fade-in', className)}>
       {(title || action) && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
           {title && (
-            <div>
-              <h1 className="text-2xl font-bold text-white font-display">{title}</h1>
-              {subtitle && <p className="text-sm text-ink-muted mt-1">{subtitle}</p>}
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-white font-display break-words">{title}</h1>
+              {subtitle && <p className="text-sm text-ink-muted mt-1 break-words">{subtitle}</p>}
             </div>
           )}
-          {action}
+          {action && <div className="sm:shrink-0">{action}</div>}
         </div>
       )}
       {children}
@@ -79,14 +79,14 @@ export function Section({ title, subtitle, action, children, className }: { titl
   return (
     <section className={cn('space-y-4', className)}>
       {(title || action) && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between min-w-0 gap-3">
           {title && (
-            <div>
-              <h2 className="text-lg font-semibold text-white font-display">{title}</h2>
-              {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-white font-display break-words">{title}</h2>
+              {subtitle && <p className="text-xs text-ink-muted mt-0.5 break-words">{subtitle}</p>}
             </div>
           )}
-          {action}
+          {action && <div className="shrink-0">{action}</div>}
         </div>
       )}
       {children}

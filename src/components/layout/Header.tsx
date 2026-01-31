@@ -19,17 +19,17 @@ export function Header() {
   const latestImport = importHistory[0];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-slate-950/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-slate-950/60 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="relative w-10 h-10 rounded-2xl bg-slate-900/80 border border-[rgb(var(--accent-low)/0.4)] flex items-center justify-center shadow-[0_0_24px_rgb(var(--accent-high)/0.2)] logo-glow">
               <span className="pointer-events-none absolute inset-0 rounded-2xl logo-shimmer" />
               <LogoIcon />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white tracking-tight font-display">Restart's Co-Pilot</h1>
-              <p className="text-[10px] text-ink-muted uppercase tracking-wider hidden sm:block">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-white tracking-tight font-display truncate">Restart's Co-Pilot</h1>
+              <p className="text-[10px] text-ink-muted uppercase tracking-wider hidden sm:block truncate">
                 Restart’s Trading Dashboard
               </p>
             </div>
