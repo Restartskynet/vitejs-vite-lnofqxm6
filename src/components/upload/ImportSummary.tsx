@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import type { ImportResultExtended } from '../../engine/types';
 import { buildTrades } from '../../engine/tradesBuilder';
 import { Card, Badge, Button } from '../ui';
-import { formatDate } from '../../lib/utils';
+import { formatDate, formatDateTime } from '../../lib/utils';
 
 interface ImportSummaryProps {
   result: ImportResultExtended;
@@ -14,6 +14,7 @@ interface ImportSummaryProps {
 
 export function ImportSummary({ result, onConfirm, onCancel, isProcessing, className }: ImportSummaryProps) {
   const [showSkipped, setShowSkipped] = useState(false);
+  const [skippedSearch, setSkippedSearch] = useState('');
 
   const hasErrors = result.errors.length > 0;
   const hasWarnings = result.warnings.length > 0;
@@ -79,6 +80,80 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
   const skippedSummary = hasSkipped
     ? `${skippedRows.length} rows skipped${topSkippedReason ? `: ${topSkippedReason}` : ''}`
     : 'No rows skipped';
+
+  const normalizedSearch = skippedSearch.trim().toLowerCase();
+
+  const skippedRowDetails = useMemo(() => {
+    const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const aliasSets = {
+      symbol: ['Symbol', 'Ticker', 'SYMBOL', 'Stock Symbol', 'Sym'],
+      side: ['Side', 'Action', 'Buy/Sell', 'B/S', 'Order Side'],
+      status: ['Status', 'STATUS', 'Order Status', 'Fill Status', 'State'],
+      filledQty: ['Filled Qty', 'Filled', 'Filled Quantity', 'Qty', 'Quantity', 'Shares', 'Total Qty'],
+      price: ['Avg Price', 'Average Price', 'Price', 'Fill Price', 'Avg. Price', 'Execution Price'],
+      filledTime: ['Filled Time', 'Fill Time', 'Time', 'Date/Time', 'Executed Time'],
+      placedTime: ['Placed Time', 'Order Time', 'Submitted Time', 'Created Time', 'Entry Time'],
+    };
+
+    const findValue = (rawData: Record<string, string>, aliases: string[]) => {
+      const normalized = new Map<string, string>();
+      Object.entries(rawData).forEach(([key, value]) => {
+        normalized.set(normalizeKey(key), value);
+      });
+
+      for (const alias of aliases) {
+        const key = normalizeKey(alias);
+        if (normalized.has(key)) {
+          return { value: normalized.get(key) ?? '', found: true };
+        }
+      }
+
+      return { value: '', found: false };
+    };
+
+    const formatValue = (value: string) => (value.trim() ? value.trim() : '—');
+    const formatFilledQty = (value: string, found: boolean) => {
+      if (!found) return '—';
+      return value.trim() ? value.trim() : '0';
+    };
+    const formatTimestamp = (value: string, found: boolean) => {
+      if (!found || !value.trim()) return '—';
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value : formatDateTime(parsed);
+    };
+
+    return skippedRows.map((row, index) => {
+      const symbol = findValue(row.rawData, aliasSets.symbol);
+      const side = findValue(row.rawData, aliasSets.side);
+      const status = findValue(row.rawData, aliasSets.status);
+      const filledQty = findValue(row.rawData, aliasSets.filledQty);
+      const price = findValue(row.rawData, aliasSets.price);
+      const filledTime = findValue(row.rawData, aliasSets.filledTime);
+      const placedTime = findValue(row.rawData, aliasSets.placedTime);
+      const timestampValue = filledTime.found ? filledTime : placedTime;
+
+      return {
+        key: `${row.rowIndex}-${index}`,
+        rowIndex: row.rowIndex ?? index + 1,
+        reasons: row.reasons ?? [],
+        symbol: formatValue(symbol.value),
+        side: formatValue(side.value),
+        status: formatValue(status.value),
+        filledQty: formatFilledQty(filledQty.value, filledQty.found),
+        price: formatValue(price.value),
+        timestamp: formatTimestamp(timestampValue.value, timestampValue.found),
+      };
+    });
+  }, [skippedRows]);
+
+  const filteredSkippedRows = useMemo(() => {
+    if (!normalizedSearch) return skippedRowDetails;
+
+    return skippedRowDetails.filter((row) => {
+      const reasonText = row.reasons.join(' ').toLowerCase();
+      return row.symbol.toLowerCase().includes(normalizedSearch) || reasonText.includes(normalizedSearch);
+    });
+  }, [normalizedSearch, skippedRowDetails]);
 
   const handleDownloadReport = () => {
     const tradeResult = buildTrades(result.fills, 0, result.pendingOrders ?? []);
@@ -200,14 +275,74 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
           </button>
 
           {showSkipped && (
-            <div className="mt-3 max-h-48 overflow-y-auto space-y-2">
-              {skippedRows.slice(0, 20).map((row, i) => (
-                <div key={i} className="p-2 rounded bg-amber-500/10 text-xs">
-                  <span className="text-amber-200">Row {row.rowIndex ?? i + 1}:</span>
-                  <span className="text-ink-muted ml-2">{row.reasons?.join(', ') || 'Unknown reason'}</span>
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-ink-muted">
+                Skipped rows include key identifiers to help you locate the original order quickly. Use search to filter by symbol or reason.
+              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <label htmlFor="skipped-search" className="text-xs text-ink-muted">
+                  Filter skipped rows
+                </label>
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    id="skipped-search"
+                    type="text"
+                    value={skippedSearch}
+                    onChange={(event) => setSkippedSearch(event.target.value)}
+                    placeholder="Symbol or reason"
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white placeholder:text-ink-subtle focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-500/30"
+                  />
                 </div>
-              ))}
-              {skippedRows.length > 20 && <p className="text-xs text-ink-muted">...and {skippedRows.length - 20} more</p>}
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                {filteredSkippedRows.map((row) => (
+                  <div key={row.key} className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <Badge variant="warning" size="sm">Row {row.rowIndex}</Badge>
+                      {row.reasons.length > 0 ? (
+                        row.reasons.map((reason, reasonIndex) => (
+                          <Badge key={`${row.key}-${reasonIndex}`} variant="danger" size="sm" className="normal-case tracking-normal">
+                            {reason}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge variant="neutral" size="sm">Unspecified reason</Badge>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-ink-muted">
+                      <div>
+                        <span className="uppercase tracking-wider text-[10px] text-ink-subtle">Symbol</span>
+                        <p className="text-white">{row.symbol}</p>
+                      </div>
+                      <div>
+                        <span className="uppercase tracking-wider text-[10px] text-ink-subtle">Side</span>
+                        <p className="text-white">{row.side}</p>
+                      </div>
+                      <div>
+                        <span className="uppercase tracking-wider text-[10px] text-ink-subtle">Status</span>
+                        <p className="text-white">{row.status}</p>
+                      </div>
+                      <div>
+                        <span className="uppercase tracking-wider text-[10px] text-ink-subtle">Filled Qty</span>
+                        <p className="text-white">{row.filledQty}</p>
+                      </div>
+                      <div>
+                        <span className="uppercase tracking-wider text-[10px] text-ink-subtle">Price</span>
+                        <p className="text-white">{row.price}</p>
+                      </div>
+                      <div>
+                        <span className="uppercase tracking-wider text-[10px] text-ink-subtle">Timestamp</span>
+                        <p className="text-white">{row.timestamp}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredSkippedRows.length === 0 && (
+                  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs text-ink-muted">
+                    No skipped rows match "{skippedSearch}".
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -257,12 +392,28 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
             ))}
           </ul>
           <label className="mt-3 flex items-start gap-2 text-xs text-amber-100">
-            <input
-              type="checkbox"
-              checked={reviewAcknowledged}
-              onChange={(event) => setReviewAcknowledged(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-amber-200/60 bg-transparent text-amber-200 focus:ring-2 focus:ring-amber-400/70"
-            />
+            <span className="relative mt-0.5">
+              <input
+                type="checkbox"
+                checked={reviewAcknowledged}
+                onChange={(event) => setReviewAcknowledged(event.target.checked)}
+                className="peer sr-only"
+              />
+              <span className="flex h-4 w-4 items-center justify-center rounded border border-amber-200/60 bg-slate-950/70 text-amber-100 transition-colors peer-checked:border-amber-200 peer-checked:bg-amber-400/20 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-400/70">
+                <svg
+                  className="h-3 w-3 text-amber-200 opacity-0 transition-opacity peer-checked:opacity-100"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.704 5.29a1 1 0 01.006 1.414l-7.42 7.454a1 1 0 01-1.42-.004L3.29 9.58a1 1 0 011.42-1.414l3.284 3.296 6.708-6.726a1 1 0 011.412-.004z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </span>
+            </span>
             I reviewed the warnings and want to continue.
           </label>
         </div>

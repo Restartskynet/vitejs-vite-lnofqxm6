@@ -301,18 +301,23 @@ export function UploadPage() {
                   <label htmlFor="brokerage-guide" className="text-xs uppercase tracking-[0.2em] text-ink-muted">
                     Brokerage export guide
                   </label>
-                  <select
-                    id="brokerage-guide"
-                    value={selectedBrokerage}
-                    onChange={(e) => setSelectedBrokerage(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgb(var(--accent-info)/0.6)]"
-                  >
-                    {brokerageGuides.map((guide) => (
-                      <option key={guide.value} value={guide.value} disabled={guide.comingSoon}>
-                        {guide.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      id="brokerage-guide"
+                      value={selectedBrokerage}
+                      onChange={(e) => setSelectedBrokerage(e.target.value)}
+                      className="w-full appearance-none rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 pr-8 text-sm text-white shadow-sm focus:outline-none focus:border-[rgb(var(--accent-info)/0.6)] focus:ring-2 focus:ring-[rgb(var(--accent-info)/0.35)]"
+                    >
+                      {brokerageGuides.map((guide) => (
+                        <option key={guide.value} value={guide.value} disabled={guide.comingSoon}>
+                          {guide.label}
+                        </option>
+                      ))}
+                    </select>
+                    <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path d="M5.75 7.5L10 11.75 14.25 7.5" />
+                    </svg>
+                  </div>
                 </div>
                 <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
                   {activeBrokerage?.comingSoon ? (

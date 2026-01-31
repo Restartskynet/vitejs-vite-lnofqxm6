@@ -113,8 +113,8 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
         </div>
       )}
 
-      <div className="overflow-x-auto -mx-5">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto max-w-full touch-pan-x table-scrollbar">
+        <table className="min-w-full w-max text-sm">
           <thead>
             <tr className="border-b border-white/10">
               <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider w-12">#</th>
@@ -158,18 +158,26 @@ export function CSVPreview({ preview, className }: CSVPreviewProps) {
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-white/10">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-ink-muted">Rows per page:</span>
-          <select
-            value={pageSize}
-            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-            className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-sky-500/50"
-          >
-            {PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
+          <label htmlFor="csv-page-size" className="text-xs text-ink-muted">
+            Rows per page:
+          </label>
+          <div className="relative">
+            <select
+              id="csv-page-size"
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="appearance-none rounded bg-white/5 border border-white/10 px-2 py-1 pr-6 text-xs text-white focus:outline-none focus:border-sky-500/50 focus:ring-2 focus:ring-sky-500/30"
+            >
+              {PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <svg className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M5.75 7.5L10 11.75 14.25 7.5" />
+            </svg>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

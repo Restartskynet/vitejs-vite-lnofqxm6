@@ -255,21 +255,26 @@ export function TradesTable({ trades, className }: TradesTableProps) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 py-4 border-t border-white/10">
         <div className="flex items-center gap-2 text-xs text-ink-muted">
           <label htmlFor="trades-page-size">Rows per page</label>
-          <select
-            id="trades-page-size"
-            value={pageSize}
-            onChange={(event) => {
-              setPageSize(Number(event.target.value));
-              setPage(0);
-            }}
-            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white focus:outline-none focus:border-sky-500/50"
-          >
-            {[5, 10, 25].map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              id="trades-page-size"
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setPage(0);
+              }}
+              className="appearance-none rounded-md border border-white/10 bg-slate-950/60 px-2 py-1 pr-6 text-xs text-white shadow-sm focus:outline-none focus:border-sky-500/50 focus:ring-2 focus:ring-sky-500/30"
+            >
+              {[5, 10, 25].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <svg className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M5.75 7.5L10 11.75 14.25 7.5" />
+            </svg>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-ink-muted">
           <span>
