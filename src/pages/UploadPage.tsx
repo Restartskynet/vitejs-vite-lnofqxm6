@@ -37,7 +37,7 @@ const brokerageGuides: BrokerageGuide[] = [
     value: 'webull',
     label: 'Webull',
     steps: [
-      'Open Webull on desktop and go to Account → Documents.',
+      'Open Webull Webtrade on desktop and go to Account → Order History.',
       'Choose Orders Records and export the CSV for the desired date range.',
       'Keep default columns (especially Filled, Avg Price, and Filled Time).',
     ],
@@ -291,9 +291,9 @@ export function UploadPage() {
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs text-ink-muted">
                 <p className="font-semibold text-white text-sm mb-2">Export checklist</p>
                 <ul className="space-y-1 list-disc list-inside">
-                  <li>Use the Webull “Orders Records” CSV export.</li>
+                  <li>Use the “Orders Records” CSV export.</li>
                   <li>Keep all default columns to preserve audit trail fidelity.</li>
-                  <li>No network calls required — import runs entirely on-device.</li>
+                  <li>No network calls required, import runs entirely on-device.</li>
                 </ul>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
