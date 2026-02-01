@@ -1,9 +1,10 @@
-import { useMemo, useState, useEffect, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { useDashboard } from '../stores/dashboardStore';
 import { Page, Section } from '../components/layout';
-import { Card, Badge, Button, ModeBadge, Input } from '../components/ui';
+import { Card, Badge, Button, ModeBadge } from '../components/ui';
 import { EquityChart } from '../components/charts';
-import { formatMoney, formatPercent, formatDateTime, toISODate, cn } from '../lib/utils';
+import { ActiveTradesCard, LastTradesPanel } from '../components/dashboard';
+import { formatMoney, formatPercent, cn } from '../lib/utils';
 
 type WatchItem = {
   title: string;
@@ -11,21 +12,6 @@ type WatchItem = {
   status: 'on-track' | 'risk' | 'neutral';
   meta?: string;
 };
-
-type RitualState = {
-  date: string;
-  checks: Record<string, boolean>;
-};
-
-type FocusItem = {
-  id: string;
-  symbol: string;
-  tag: 'Focus' | 'Watching';
-};
-
-const RITUAL_STORAGE_KEY = 'restart-ritual-checklist';
-const PROCESS_STORAGE_KEY = 'restart-process-streak';
-const FOCUS_STORAGE_KEY = 'restart-focus-items';
 
 function KPIItem({
   label,
@@ -58,115 +44,10 @@ function KPIItem({
   );
 }
 
-function getImportStreak(importDates: string[]): number {
-  if (importDates.length === 0) return 0;
-  const uniqueDates = Array.from(new Set(importDates)).sort().reverse();
-  let streak = 1;
-  for (let i = 0; i < uniqueDates.length - 1; i += 1) {
-    const current = new Date(uniqueDates[i]);
-    const next = new Date(uniqueDates[i + 1]);
-    const diffDays = Math.round((current.getTime() - next.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 1) {
-      streak += 1;
-    } else {
-      break;
-    }
-  }
-  return streak;
-}
-
-function loadProcessState(today: string) {
-  if (typeof window === 'undefined') {
-    return { lastDate: '', streak: 0 };
-  }
-  try {
-    const raw = window.localStorage.getItem(PROCESS_STORAGE_KEY);
-    if (!raw) return { lastDate: '', streak: 0 };
-    const parsed = JSON.parse(raw) as { lastDate: string; streak: number };
-    return parsed.lastDate && parsed.lastDate <= today ? parsed : { lastDate: '', streak: 0 };
-  } catch {
-    return { lastDate: '', streak: 0 };
-  }
-}
-
-function loadRitualState(today: string): RitualState {
-  if (typeof window === 'undefined') {
-    return { date: today, checks: {} };
-  }
-  try {
-    const raw = window.localStorage.getItem(RITUAL_STORAGE_KEY);
-    if (!raw) return { date: today, checks: {} };
-    const parsed = JSON.parse(raw) as RitualState;
-    if (parsed.date !== today) {
-      return { date: today, checks: {} };
-    }
-    return parsed;
-  } catch {
-    return { date: today, checks: {} };
-  }
-}
-
-function loadFocusItems(): FocusItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(FOCUS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as FocusItem[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 export function DashboardPage() {
   const { state } = useDashboard();
-  const { currentRisk, metrics, dailyEquity, hasData, isLoading, trades, strategy, importHistory } = state;
+  const { currentRisk, metrics, dailyEquity, hasData, isLoading, trades, strategy, settings } = state;
   const activeTrades = trades.filter((trade) => trade.status === 'ACTIVE');
-  const latestImport = importHistory[0];
-  const todayKey = toISODate(new Date());
-
-  const [ritualState, setRitualState] = useState<RitualState>(() => loadRitualState(todayKey));
-  const [processState, setProcessState] = useState(() => loadProcessState(todayKey));
-  const [focusItems, setFocusItems] = useState<FocusItem[]>(() => loadFocusItems());
-  const [newFocusSymbol, setNewFocusSymbol] = useState('');
-
-  const importedToday = latestImport ? toISODate(latestImport.importedAt) === todayKey : false;
-
-  useEffect(() => {
-    setRitualState((prev) => {
-      const next = { ...prev, date: todayKey, checks: { ...prev.checks } };
-      if (prev.date !== todayKey) {
-        next.checks = {};
-      }
-      if (importedToday) {
-        next.checks.import = true;
-      }
-      return next;
-    });
-  }, [todayKey, importedToday]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(RITUAL_STORAGE_KEY, JSON.stringify(ritualState));
-  }, [ritualState]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(PROCESS_STORAGE_KEY, JSON.stringify(processState));
-  }, [processState]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(FOCUS_STORAGE_KEY, JSON.stringify(focusItems));
-  }, [focusItems]);
-
-  const totalExposure = useMemo(() => {
-    return activeTrades.reduce((sum, trade) => {
-      const entry = Number.isFinite(trade.entryPrice) ? trade.entryPrice : 0;
-      const qty = Number.isFinite(trade.remainingQty) ? trade.remainingQty : 0;
-      return sum + entry * qty;
-    }, 0);
-  }, [activeTrades]);
 
   const watchItems: WatchItem[] = useMemo(() => {
     if (!hasData) {
@@ -201,34 +82,6 @@ export function DashboardPage() {
       meta: trade.stopPrice ? `Stop ${formatMoney(trade.stopPrice)}` : 'Stop not set',
     }));
   }, [activeTrades, hasData]);
-
-  const importStreak = useMemo(() => {
-    const importDates = importHistory.map((entry) => toISODate(entry.importedAt));
-    return getImportStreak(importDates);
-  }, [importHistory]);
-
-  const ritualSteps = [
-    {
-      id: 'import',
-      label: 'Import today’s CSV',
-      helper: importedToday ? 'Import logged for today.' : 'No import yet today.',
-    },
-    {
-      id: 'directive',
-      label: 'Review Today’s Risk',
-      helper: 'Mode, risk %, allowed $',
-    },
-    {
-      id: 'active',
-      label: 'Check active trades',
-      helper: `${activeTrades.length} active trade${activeTrades.length === 1 ? '' : 's'} live`,
-    },
-    {
-      id: 'process',
-      label: 'Confirm process check',
-      helper: processState.lastDate === todayKey ? 'Confirmed today.' : 'One tap to confirm.',
-    },
-  ];
 
   const winsToHigh = currentRisk.mode === 'LOW'
     ? Math.max(strategy.winsToRecover - currentRisk.lowWinsProgress, 0)
@@ -299,73 +152,6 @@ export function DashboardPage() {
   }
 
   const isHighMode = currentRisk.mode === 'HIGH';
-  const ritualCompleted = ritualSteps.every((step) => ritualState.checks[step.id]);
-  const processMilestone = processState.streak > 0 && processState.streak % 5 === 0;
-
-  const handleToggleRitual = (id: string) => {
-    setRitualState((prev) => ({
-      ...prev,
-      checks: {
-        ...prev.checks,
-        [id]: !prev.checks[id],
-      },
-    }));
-  };
-
-  const handleProcessCheck = () => {
-    const today = todayKey;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayKey = toISODate(yesterday);
-
-    setProcessState((prev) => {
-      if (prev.lastDate === today) return prev;
-      const nextStreak = prev.lastDate === yesterdayKey ? prev.streak + 1 : 1;
-      return { lastDate: today, streak: nextStreak };
-    });
-
-    setRitualState((prev) => ({
-      ...prev,
-      checks: {
-        ...prev.checks,
-        process: true,
-      },
-    }));
-  };
-
-  const handleAddFocus = () => {
-    const symbol = newFocusSymbol.trim().toUpperCase();
-    if (!symbol || focusItems.length >= 10) return;
-    const exists = focusItems.some((item) => item.symbol === symbol);
-    if (exists) {
-      setNewFocusSymbol('');
-      return;
-    }
-    setFocusItems((prev) => [
-      ...prev,
-      {
-        id: `focus_${Date.now()}_${symbol}`,
-        symbol,
-        tag: 'Watching',
-      },
-    ]);
-    setNewFocusSymbol('');
-  };
-
-  const handleToggleFocusTag = (id: string) => {
-    setFocusItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, tag: item.tag === 'Watching' ? 'Focus' : 'Watching' }
-          : item
-      )
-    );
-  };
-
-  const handleRemoveFocus = (id: string) => {
-    setFocusItems((prev) => prev.filter((item) => item.id !== id));
-  };
-
   const performanceTone = (() => {
     if (metrics.totalTrades === 0) return 'neutral';
     const winLossRatio = metrics.avgLoss > 0 ? metrics.avgWin / metrics.avgLoss : 0;
@@ -377,17 +163,6 @@ export function DashboardPage() {
     }
     return 'neutral';
   })();
-
-  const drawdownColor = () => {
-    const pct = Math.min(Math.abs(metrics.maxDrawdownPct) * 100, 60);
-    const ratio = pct / 60;
-    const start = { r: 126, g: 144, b: 198 };
-    const end = { r: 248, g: 113, b: 113 };
-    const r = Math.round(start.r + (end.r - start.r) * ratio);
-    const g = Math.round(start.g + (end.g - start.g) * ratio);
-    const b = Math.round(start.b + (end.b - start.b) * ratio);
-    return `rgb(${r} ${g} ${b})`;
-  };
 
   return (
     <Page
@@ -484,17 +259,20 @@ export function DashboardPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                         <p className="text-[10px] uppercase tracking-[0.2em] text-ink-muted">Forecast</p>
-                        {winsToHigh === 0 ? (
+                        {isHighMode ? (
                           <div className="mt-2 flex items-center gap-2">
                             <Badge variant="high" size="sm">HIGH active</Badge>
                             <span className="text-xs text-ink-muted">Risk mode is currently HIGH.</span>
                           </div>
                         ) : (
                           <>
-                            <p className="mt-2 text-sm font-semibold text-white">
-                              In {winsToHigh} win{winsToHigh === 1 ? '' : 's'} → HIGH @ {formatPercent(strategy.highModeRiskPct)}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Badge variant="low" size="sm">LOW active</Badge>
+                              <span className="text-xs text-ink-muted">Risk mode is currently LOW.</span>
+                            </div>
+                            <p className="mt-2 text-xs text-ink-muted">
+                              {winsToHigh} win{winsToHigh === 1 ? '' : 's'} in LOW → HIGH @ {formatPercent(strategy.highModeRiskPct)}
                             </p>
-                            <p className="text-xs text-ink-muted">Momentum lifts exposure after wins in LOW mode.</p>
                           </>
                         )}
                       </div>
@@ -539,187 +317,23 @@ export function DashboardPage() {
               </div>
             </Card>
 
-            <Card
-              className={cn(
-                'relative overflow-hidden border-2 motion-safe:animate-slide-up',
-                activeTrades.length > 0
-                  ? 'border-[rgb(var(--accent-info)/0.6)] bg-[rgb(var(--accent-info)/0.08)]'
-                  : 'border-white/10'
-              )}
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(var(--accent-info)/0.18),_transparent_55%)] opacity-70" />
-              <div className="relative">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[rgb(var(--accent-info))]">Active</span>
-                      <Badge variant={activeTrades.length > 0 ? 'info' : 'neutral'} size="sm">
-                        {activeTrades.length} Live
-                      </Badge>
-                    </div>
-                    <h3 className="text-xl font-semibold text-white">Active trades, high visibility</h3>
-                    <p className="text-xs text-ink-muted">Symbol · side · shares · entry · stop · opened</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Exposure</p>
-                    <p className="text-lg font-semibold text-white">{formatMoney(totalExposure)}</p>
-                    <p className="text-xs text-ink-muted">{activeTrades.length} active trade(s)</p>
-                  </div>
-                </div>
-                {activeTrades.length > 0 ? (
-                  <div className="space-y-3">
-                    {activeTrades.map((trade) => (
-                      <div
-                        key={trade.id}
-                        className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-4 p-4 rounded-xl bg-white/[0.06] border border-white/[0.08]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Badge variant={trade.side === 'LONG' ? 'success' : 'danger'} size="sm">
-                            {trade.side}
-                          </Badge>
-                          <span className="text-lg font-semibold text-white">{trade.symbol}</span>
-                          <Badge variant="info" size="sm">ACTIVE</Badge>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-ink-muted uppercase tracking-wider">Entry</p>
-                          <p className="text-sm text-white font-medium tabular-nums">{formatMoney(trade.entryPrice)}</p>
-                          <p className="text-xs text-ink-muted">{trade.remainingQty.toLocaleString()} shares</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-ink-muted uppercase tracking-wider">Stop</p>
-                          <p className="text-sm text-white font-medium tabular-nums">
-                            {trade.stopPrice ? formatMoney(trade.stopPrice) : 'Stop unset'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-ink-muted uppercase tracking-wider">Opened</p>
-                          <p className="text-sm text-slate-300">{formatDateTime(trade.entryDate)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-6 text-center text-ink-muted">
-                    No active trades right now.
-                  </div>
-                )}
-              </div>
-            </Card>
+            <ActiveTradesCard
+              activeTrades={activeTrades}
+              allTrades={trades}
+              startingEquity={settings.startingEquity}
+              strategy={strategy}
+            />
           </div>
 
           <div className="space-y-6">
-            <Card className="glass-panel motion-safe:animate-slide-up">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Today’s ritual</h3>
-                  <p className="text-xs text-ink-muted">Small steps, high signal</p>
-                </div>
-                <Badge
-                  variant={ritualCompleted ? 'success' : 'neutral'}
-                  size="sm"
-                  className={cn(ritualCompleted && 'motion-safe:animate-pulse')}
-                >
-                  {ritualCompleted ? 'Completed' : 'Optional'}
-                </Badge>
-              </div>
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between text-xs text-ink-muted">
-                  <span>Progress</span>
-                  <span className="text-white font-semibold">{ritualSteps.filter((step) => ritualState.checks[step.id]).length}/{ritualSteps.length}</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className={cn(
-                      'h-full transition-all duration-[var(--motion-duration-base)]',
-                      isHighMode ? 'bg-[rgb(var(--accent-high))]' : 'bg-[rgb(var(--accent-low))]'
-                    )}
-                    style={{ width: `${(ritualSteps.filter((step) => ritualState.checks[step.id]).length / ritualSteps.length) * 100}%` }}
-                  />
-                </div>
-                {ritualSteps.map((step) => {
-                  const checked = Boolean(ritualState.checks[step.id]);
-                  return (
-                    <button
-                      key={step.id}
-                      onClick={() => handleToggleRitual(step.id)}
-                      className={cn(
-                        'w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all',
-                        checked
-                          ? 'border-[rgb(var(--accent-low)/0.6)] bg-[rgb(var(--accent-low)/0.08)]'
-                          : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
-                      )}
-                      aria-pressed={checked}
-                    >
-                      <span
-                        className={cn(
-                          'h-4 w-4 rounded-full border flex items-center justify-center text-[10px]',
-                          checked
-                            ? 'border-[rgb(var(--accent-low))] text-[rgb(var(--accent-low))]'
-                            : 'border-white/20 text-ink-muted'
-                        )}
-                      >
-                        {checked ? '✓' : ''}
-                      </span>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-white">{step.label}</p>
-                        <p className="text-xs text-ink-muted">{step.helper}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-4 flex flex-col gap-3">
-                <Button
-                  variant="secondary"
-                  onClick={handleProcessCheck}
-                  iconRight={<span className="text-xs">✓</span>}
-                >
-                  Process check
-                </Button>
-                <div className="flex items-center justify-between text-xs text-ink-muted">
-                  <span>Import streak</span>
-                  <span className="text-white font-semibold">{importStreak} day{importStreak === 1 ? '' : 's'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-ink-muted">
-                  <span>Process streak</span>
-                  <span className={cn('text-white font-semibold', processMilestone && 'text-[rgb(var(--accent-high))]')}>{processState.streak} day{processState.streak === 1 ? '' : 's'}</span>
-                </div>
-                {processMilestone && (
-                  <div className="rounded-lg border border-[rgb(var(--accent-high)/0.4)] bg-[rgb(var(--accent-high)/0.12)] px-3 py-2 text-xs text-[rgb(var(--accent-high))]">
-                    Milestone reached. Keep the streak alive.
-                  </div>
-                )}
-              </div>
-            </Card>
-
+            <LastTradesPanel trades={trades} />
           </div>
         </div>
       </Section>
 
       <Section className="mb-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <EquityChart data={dailyEquity} />
-          </div>
-          <Card className="motion-safe:animate-slide-up border border-dashed border-white/15 bg-white/[0.02] opacity-80">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Live data</h3>
-                <p className="text-xs text-ink-muted">Not active yet</p>
-              </div>
-              <Badge variant="neutral" size="sm" className="shadow-[0_0_18px_rgb(var(--accent-info)/0.25)]">COMING SOON</Badge>
-            </div>
-            <div className="space-y-3 text-sm text-ink-muted">
-              <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.015] p-4">
-                <p className="text-white font-semibold">Market pulse</p>
-                <p className="text-xs text-ink-muted">Placeholder only · Online mode required.</p>
-              </div>
-              <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.015] p-4">
-                <p className="text-white font-semibold">Signals & scanner</p>
-                <p className="text-xs text-ink-muted">Placeholder only · Manual focus list remains active.</p>
-              </div>
-            </div>
-          </Card>
+        <div className="grid grid-cols-1 gap-6">
+          <EquityChart data={dailyEquity} />
         </div>
       </Section>
 
@@ -780,9 +394,9 @@ export function DashboardPage() {
               <KPIItem label="Avg loss" value={formatMoney(metrics.avgLoss)} tone={performanceTone} />
               <KPIItem
                 label="Max drawdown"
-                value={formatPercent(Math.abs(metrics.maxDrawdownPct), 1)}
+                value={`↓ ${formatPercent(Math.abs(metrics.maxDrawdownPct), 1)}`}
                 tone="neutral"
-                style={{ color: drawdownColor() }}
+                style={{ color: 'rgb(var(--accent-danger))' }}
               />
             </div>
             <details className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">

@@ -439,6 +439,7 @@ export function buildTrades(
       riskPctAtEntry: 0,
       equityAtEntry: startingEquity,
       riskDollarsAtEntry: 0,
+      causedModeSwitch: false,
       outcome,
       marketDate,
       durationMinutes: exitDate ? durationMinutes(unit.entryTime, exitDate) : null,
@@ -450,10 +451,15 @@ export function buildTrades(
     trades.push(trade);
   }
 
-  const { assignments } = applyDailyDirectives(trades, startingEquity);
+  const { assignments, modeSwitches } = applyDailyDirectives(trades, startingEquity);
   const enrichedTrades = trades.map((trade) => {
     const assignment = assignments.get(trade.id);
-    if (!assignment) return trade;
+    if (!assignment) {
+      return {
+        ...trade,
+        causedModeSwitch: modeSwitches.get(trade.id) ?? false,
+      };
+    }
     return {
       ...trade,
       modeAtEntry: assignment.modeAtEntry,
@@ -462,6 +468,7 @@ export function buildTrades(
       riskDollarsAtEntry: assignment.riskDollarsAtEntry,
       riskUsed: assignment.riskDollarsAtEntry,
       riskPercent: assignment.riskPctAtEntry * 100,
+      causedModeSwitch: modeSwitches.get(trade.id) ?? false,
     };
   });
 

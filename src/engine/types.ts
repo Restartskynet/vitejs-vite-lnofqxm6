@@ -87,6 +87,7 @@ export interface Trade {
   riskPctAtEntry: number;
   equityAtEntry: number;
   riskDollarsAtEntry: number;
+  causedModeSwitch?: boolean;
   
   // Classification
   outcome: ClosedTradeOutcome | 'ACTIVE';
