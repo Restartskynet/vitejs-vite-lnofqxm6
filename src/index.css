@@ -78,7 +78,8 @@ html[data-grid='off'] .synthwave-grid {
   .logo-shimmer::before,
   .cta-arrow,
   .cta-arrow-large,
-  .cta-hero {
+  .cta-hero,
+  .upload-cta-breath {
     animation: none !important;
   }
 }
@@ -168,6 +169,21 @@ html[data-grid='off'] .synthwave-grid {
   }
 }
 
+@keyframes uploadBreath {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-info) / 0.35),
+      0 0 18px rgb(var(--accent-glow) / 0.18);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-info) / 0.55),
+      0 0 28px rgb(var(--accent-glow) / 0.3);
+  }
+}
+
 @layer utilities {
   .ambient-orbit {
     animation: ambientShift var(--motion-duration-ambient) var(--motion-ease-linear) infinite;
@@ -225,6 +241,38 @@ html[data-grid='off'] .synthwave-grid {
     transform: translateX(-80%);
     transition: transform 600ms var(--motion-ease-standard);
     pointer-events: none;
+  }
+
+  .upload-cta-icon {
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-info) / 0.4),
+      0 0 18px rgb(var(--accent-glow) / 0.2);
+    transition:
+      transform 200ms var(--motion-ease-standard),
+      box-shadow 200ms var(--motion-ease-standard),
+      border-color 200ms var(--motion-ease-standard),
+      background-color 200ms var(--motion-ease-standard);
+  }
+
+  .upload-cta-breath {
+    animation: uploadBreath 3.6s ease-in-out infinite;
+  }
+
+  .upload-zone:hover .upload-cta-icon,
+  .upload-zone:focus-visible .upload-cta-icon {
+    transform: scale(1.05);
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-info) / 0.6),
+      0 0 32px rgb(var(--accent-glow) / 0.35);
+  }
+
+  .upload-zone[data-dragging='true'] .upload-cta-icon {
+    transform: scale(1.06);
+    border-color: rgb(var(--accent-low) / 0.7);
+    background-color: rgb(var(--accent-low) / 0.2);
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-low) / 0.6),
+      0 0 36px rgb(var(--accent-glow) / 0.4);
   }
 
   .cta-hero:hover::after,

@@ -83,15 +83,26 @@ export function UploadZone({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label="Upload CSV file"
+      data-dragging={isDragging}
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
+        'upload-zone group relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-[var(--motion-duration-base)] ease-[var(--motion-ease-standard)]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--accent-low)/0.7)] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
         isDragging
-          ? 'border-[rgb(var(--accent-info))] bg-[rgb(var(--accent-info)/0.12)] scale-[1.01]'
-          : 'border-white/15 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04]',
+          ? 'border-[rgb(var(--accent-low))] bg-[rgb(var(--accent-low)/0.12)] scale-[1.01] shadow-[0_0_30px_rgb(var(--accent-glow)/0.45)]'
+          : 'border-white/15 bg-white/[0.02] hover:border-[rgb(var(--accent-low)/0.5)] hover:bg-white/[0.04] hover:shadow-[0_0_24px_rgb(var(--accent-glow)/0.25)]',
         isLoading && 'pointer-events-none opacity-70',
         className
       )}
@@ -122,7 +133,7 @@ export function UploadZone({
         </>
       ) : (
         <>
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[rgb(var(--accent-info)/0.2)] border border-[rgb(var(--accent-info)/0.4)] flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="upload-cta-icon upload-cta-breath w-16 h-16 mx-auto mb-4 rounded-2xl bg-[rgb(var(--accent-info)/0.2)] border border-[rgb(var(--accent-info)/0.4)] flex items-center justify-center transition-transform">
             <svg className="w-8 h-8 text-[rgb(var(--accent-info))]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
