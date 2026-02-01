@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 
 import type { Trade } from "../engine/types";
 import { applyDailyDirectives, getCurrentRisk, STRATEGY } from "../engine/riskEngine";
+import { calculateMetrics } from "../engine/tradesBuilder";
 import { toETDateKey } from "../lib/dateKey";
+import { formatPercent } from "../lib/utils";
 
 const makeDate = (day: string, time: string) => new Date(`${day}T${time}Z`);
 
@@ -17,6 +19,8 @@ function makeTrade(
   const exitDate = exitDay ? makeDate(exitDay, "15:30:00") : null;
   const status = exitDate ? "CLOSED" : "ACTIVE";
   const outcome = status === "CLOSED" ? (realizedPnL >= 0 ? "WIN" : "LOSS") : "ACTIVE";
+  const riskPctAtEntry =
+    modeAtEntry === "HIGH" ? STRATEGY.highModeRiskPct : STRATEGY.lowModeRiskPct;
 
   return {
     id,
@@ -42,9 +46,9 @@ function makeTrade(
     riskPercent: 0,
     stopPrice: null,
     modeAtEntry,
-    riskPctAtEntry: STRATEGY.highModeRiskPct,
+    riskPctAtEntry,
     equityAtEntry: 10000,
-    riskDollarsAtEntry: 10000 * STRATEGY.highModeRiskPct,
+    riskDollarsAtEntry: 10000 * riskPctAtEntry,
     outcome,
     marketDate: exitDay ?? entryDay,
     durationMinutes: exitDate ? 60 : null,
@@ -130,5 +134,17 @@ describe("Restart throttle state machine (daily lock)", () => {
 
     expect(current.mode).toBe("HIGH");
     expect(current.riskPct).toBe(STRATEGY.highModeRiskPct);
+  });
+
+  test("win rate is a 0-1 fraction and formats to percent", () => {
+    const trades = [
+      makeTrade("W1", "2026-02-01", "2026-02-01", 100),
+      makeTrade("L1", "2026-02-02", "2026-02-02", -50),
+    ];
+
+    const metrics = calculateMetrics(trades);
+
+    expect(metrics.winRate).toBe(0.5);
+    expect(formatPercent(metrics.winRate)).toBe("50.00%");
   });
 });

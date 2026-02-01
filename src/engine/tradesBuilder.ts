@@ -543,7 +543,7 @@ export function calculateMetrics(trades: Trade[]) {
     wins: wins.length,
     losses: losses.length,
     breakeven: breakeven.length,
-    winRate: closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0,
+    winRate: closedTrades.length > 0 ? wins.length / closedTrades.length : 0,
     totalPnL,
     avgWin,
     avgLoss,
