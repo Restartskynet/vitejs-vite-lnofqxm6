@@ -1,13 +1,30 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Card } from '../ui';
-import { formatMoney, formatDate, toISODate, cn } from '../../lib/utils';
+import { formatMoney, formatDate, cn } from '../../lib/utils';
 import type { DailyEquity } from '../../engine/types';
-import { getPresetRange, isValidRange, parseDateInput, type TimeframePreset } from '../../lib/dateRange';
+import { epochDayToIso, isoToEpochDay, normalizeDateKey } from '../../lib/dateKey';
+
+type TimeframePreset = '1W' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
 
 interface EquityChartProps {
   data: DailyEquity[];
   className?: string;
 }
+
+type NormalizedEquityPoint = DailyEquity & {
+  dateKey: string;
+  epochDay: number;
+};
+
+type AppliedRange = {
+  startEpoch: number;
+  endEpoch: number;
+  startKey: string;
+  endKey: string;
+  daysShown: number;
+  clamped: boolean;
+  desiredDays?: number;
+};
 
 const CHART_WIDTH = 700;
 const CHART_HEIGHT = 260;
@@ -19,60 +36,127 @@ function getTickValues(min: number, max: number, count: number) {
   return Array.from({ length: count }, (_, i) => min + step * i);
 }
 
+function clampEpochDay(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function parseIsoParts(iso: string) {
+  const [year, month, day] = iso.split('-').map(Number);
+  return { year, month, day };
+}
+
+function shiftEpochByMonths(epochDay: number, months: number) {
+  const { year, month, day } = parseIsoParts(epochDayToIso(epochDay));
+  const shifted = new Date(Date.UTC(year, month - 1 + months, day));
+  return Math.floor(shifted.getTime() / 86400000);
+}
+
+function getPresetStartEpoch(preset: TimeframePreset, endEpoch: number) {
+  switch (preset) {
+    case '1W':
+      return endEpoch - 6;
+    case '1M':
+      return shiftEpochByMonths(endEpoch, -1);
+    case '3M':
+      return shiftEpochByMonths(endEpoch, -3);
+    case '6M':
+      return shiftEpochByMonths(endEpoch, -6);
+    case '1Y':
+      return shiftEpochByMonths(endEpoch, -12);
+    case 'YTD': {
+      const { year } = parseIsoParts(epochDayToIso(endEpoch));
+      return isoToEpochDay(`${year}-01-01`);
+    }
+    case 'ALL':
+    default:
+      return endEpoch;
+  }
+}
+
 export function EquityChart({ data, className }: EquityChartProps) {
   const [showDrawdown, setShowDrawdown] = useState(false);
   const [timeframe, setTimeframe] = useState<TimeframePreset | 'CUSTOM'>('ALL');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
-  const [appliedCustomRange, setAppliedCustomRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [appliedCustomRange, setAppliedCustomRange] = useState<AppliedRange | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const safeData = useMemo(() => {
-    if (!Array.isArray(data)) return [];
-    return data.filter((d) => d && typeof d.accountEquity === 'number');
+  const { normalizedData, invalidKeyCount } = useMemo(() => {
+    if (!Array.isArray(data)) return { normalizedData: [] as NormalizedEquityPoint[], invalidKeyCount: 0 };
+    let invalidCount = 0;
+    const cleaned: NormalizedEquityPoint[] = [];
+    data.forEach((point) => {
+      if (!point || typeof point.accountEquity !== 'number') return;
+      const dateKey = normalizeDateKey(point.date);
+      if (!dateKey) {
+        invalidCount += 1;
+        return;
+      }
+      cleaned.push({ ...point, dateKey, epochDay: isoToEpochDay(dateKey) });
+    });
+    return { normalizedData: cleaned, invalidKeyCount: invalidCount };
   }, [data]);
 
   const sortedData = useMemo(() => {
-    return [...safeData].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [safeData]);
+    return [...normalizedData].sort((a, b) => a.epochDay - b.epochDay);
+  }, [normalizedData]);
 
   const dataRange = useMemo(() => {
     if (sortedData.length === 0) return null;
-    const start = new Date(sortedData[0].date);
-    const end = new Date(sortedData[sortedData.length - 1].date);
-    return { start, end };
+    const startEpoch = sortedData[0].epochDay;
+    const endEpoch = sortedData[sortedData.length - 1].epochDay;
+    return {
+      startEpoch,
+      endEpoch,
+      startKey: epochDayToIso(startEpoch),
+      endKey: epochDayToIso(endEpoch),
+      totalDays: endEpoch - startEpoch + 1,
+    };
   }, [sortedData]);
 
   useEffect(() => {
     if (timeframe !== 'CUSTOM' || !dataRange) return;
     if (!customStart && !customEnd) {
-      setCustomStart(toISODate(dataRange.start));
-      setCustomEnd(toISODate(dataRange.end));
+      setCustomStart(dataRange.startKey);
+      setCustomEnd(dataRange.endKey);
     }
   }, [customStart, customEnd, dataRange, timeframe]);
 
   useEffect(() => {
     if (timeframe !== 'CUSTOM' || !dataRange || appliedCustomRange) return;
-    const endOfRange = new Date(dataRange.end);
-    endOfRange.setHours(23, 59, 59, 999);
-    setAppliedCustomRange({ start: dataRange.start, end: endOfRange });
+    setAppliedCustomRange({
+      startEpoch: dataRange.startEpoch,
+      endEpoch: dataRange.endEpoch,
+      startKey: dataRange.startKey,
+      endKey: dataRange.endKey,
+      daysShown: dataRange.totalDays,
+      clamped: false,
+    });
   }, [appliedCustomRange, dataRange, timeframe]);
 
-  const activeRange = useMemo(() => {
+  const activeRange = useMemo<AppliedRange | null>(() => {
     if (!dataRange) return null;
     if (timeframe === 'CUSTOM') return appliedCustomRange;
-    return getPresetRange(timeframe, dataRange.start, dataRange.end);
+    const rawStart = timeframe === 'ALL' ? dataRange.startEpoch : getPresetStartEpoch(timeframe, dataRange.endEpoch);
+    const clampedStart = clampEpochDay(rawStart, dataRange.startEpoch, dataRange.endEpoch);
+    const endEpoch = dataRange.endEpoch;
+    const desiredDays = endEpoch - rawStart + 1;
+    const daysShown = endEpoch - clampedStart + 1;
+    return {
+      startEpoch: clampedStart,
+      endEpoch,
+      startKey: epochDayToIso(clampedStart),
+      endKey: dataRange.endKey,
+      daysShown,
+      clamped: clampedStart !== rawStart,
+      desiredDays,
+    };
   }, [appliedCustomRange, dataRange, timeframe]);
 
   const filteredData = useMemo(() => {
     if (!activeRange) return sortedData;
-    const startTime = activeRange.start.getTime();
-    const endTime = activeRange.end.getTime();
-    return sortedData.filter((d) => {
-      const time = new Date(d.date).getTime();
-      return time >= startTime && time <= endTime;
-    });
+    return sortedData.filter((point) => point.epochDay >= activeRange.startEpoch && point.epochDay <= activeRange.endEpoch);
   }, [activeRange, sortedData]);
 
   const chartData = useMemo(() => {
@@ -82,18 +166,49 @@ export function EquityChart({ data, className }: EquityChartProps) {
 
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
-    const range = maxVal - minVal || 1;
-
-    let peak = values[0];
-    const drawdowns = values.map((v) => {
-      if (v > peak) peak = v;
-      return peak > 0 ? ((peak - v) / peak) * 100 : 0;
+    const drawdowns = filteredData.map((point) => {
+      const dd = typeof point.drawdownPct === 'number' ? point.drawdownPct : 0;
+      return Math.min(0, dd) * 100;
     });
 
-    return { values, drawdowns, minVal, maxVal, range };
+    return { values, drawdowns, minVal, maxVal };
   }, [filteredData]);
 
-  if (safeData.length === 0) {
+  const rangeSummary = useMemo(() => {
+    if (!activeRange) return null;
+    const applied = `${activeRange.startKey} → ${activeRange.endKey}`;
+    const days = `${activeRange.daysShown} days shown`;
+    const note =
+      timeframe === 'CUSTOM'
+        ? activeRange.clamped
+          ? 'Clamped to available data.'
+          : null
+        : activeRange.clamped && activeRange.desiredDays
+          ? `${timeframe} requested · only ${activeRange.daysShown}d available`
+          : null;
+    return { applied, days, note };
+  }, [activeRange, timeframe]);
+
+  const headerStats = useMemo(() => {
+    if (filteredData.length === 0) return null;
+    const startEquity = filteredData[0].accountEquity;
+    const endEquity = filteredData[filteredData.length - 1].accountEquity;
+    const net = endEquity - startEquity;
+    const netPct = startEquity !== 0 ? net / startEquity : 0;
+    const maxDrawdownPct = filteredData.reduce(
+      (min, point) => Math.min(min, point.drawdownPct ?? 0),
+      0
+    );
+    return {
+      startEquity,
+      endEquity,
+      net,
+      netPct,
+      maxDrawdownPct: Math.abs(maxDrawdownPct),
+    };
+  }, [filteredData]);
+
+  if (normalizedData.length === 0) {
     return (
       <Card className={className}>
         <div className="text-center py-12 text-ink-muted">
@@ -112,10 +227,9 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const drawableHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
 
   const displayValues = chartData ? (showDrawdown ? chartData.drawdowns : chartData.values) : [];
-  const displayMin = chartData ? (showDrawdown ? 0 : chartData.minVal) : 0;
-  const displayMax = chartData
-    ? (showDrawdown ? Math.max(...chartData.drawdowns, 1) : chartData.maxVal)
-    : 1;
+  const drawdownMin = chartData ? Math.min(...chartData.drawdowns, 0) : 0;
+  const displayMin = chartData ? (showDrawdown ? drawdownMin : chartData.minVal) : 0;
+  const displayMax = chartData ? (showDrawdown ? 0 : chartData.maxVal) : 1;
   const displayRange = displayMax - displayMin || 1;
 
   const points = displayValues.map((value, index) => {
@@ -128,13 +242,30 @@ export function EquityChart({ data, className }: EquityChartProps) {
     .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x},${point.y}`)
     .join(' ');
 
-  const yTicks = getTickValues(displayMin, displayMax, 4);
-  const xTickIndices = [0, Math.floor(pointCount * 0.33), Math.floor(pointCount * 0.66), pointCount - 1]
+  const baselineY = showDrawdown
+    ? PADDING.top + (1 - (0 - displayMin) / displayRange) * drawableHeight
+    : CHART_HEIGHT - PADDING.bottom;
+
+  const yTicks = getTickValues(displayMin, displayMax, 3);
+  const xTickIndices = [0, Math.floor(pointCount * 0.5), pointCount - 1]
     .filter((value, index, array) => array.indexOf(value) === index && value >= 0 && value < pointCount);
 
   const hoveredPoint = hoveredIndex !== null ? points[hoveredIndex] : null;
   const hoveredData = hoveredIndex !== null ? filteredData[hoveredIndex] : null;
+  const previousData = hoveredIndex !== null && hoveredIndex > 0 ? filteredData[hoveredIndex - 1] : null;
   const hasRangeData = Boolean(chartData) && filteredData.length > 0;
+  const hoveredDrawdown = hoveredIndex !== null && chartData ? chartData.drawdowns[hoveredIndex] : null;
+  const equityDelta = hoveredData && previousData ? hoveredData.accountEquity - previousData.accountEquity : null;
+  const tradingDelta = hoveredData && previousData ? hoveredData.tradingEquity - previousData.tradingEquity : null;
+  const adjustmentDelta =
+    hoveredData && previousData
+      ? (hoveredData.accountEquity - hoveredData.tradingEquity) -
+        (previousData.accountEquity - previousData.tradingEquity)
+      : null;
+
+  const lineColor = showDrawdown ? 'rgb(var(--accent-danger))' : 'rgb(var(--accent-low))';
+  const areaId = showDrawdown ? 'drawdown-line' : 'equity-line';
+  const netTone = headerStats ? (headerStats.net >= 0 ? 'text-emerald-300' : 'text-red-300') : 'text-white';
 
   const timeframes: Array<{ label: string; value: TimeframePreset | 'CUSTOM' }> = [
     { label: '1W', value: '1W' },
@@ -147,12 +278,25 @@ export function EquityChart({ data, className }: EquityChartProps) {
     { label: 'Custom', value: 'CUSTOM' },
   ];
 
+  const presetLabel = (preset: TimeframePreset) => {
+    if (!dataRange || preset === 'ALL') return preset;
+    const rawStart = getPresetStartEpoch(preset, dataRange.endEpoch);
+    const desiredDays = dataRange.endEpoch - rawStart + 1;
+    if (dataRange.totalDays < desiredDays) {
+      return `${preset} (only ${dataRange.totalDays}d)`;
+    }
+    return preset;
+  };
+
   return (
     <Card className={className}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
         <div className="min-w-0">
-          <h3 className="text-lg font-semibold text-white">Equity curve</h3>
-          <p className="text-xs text-ink-muted">{filteredData.length} trading days · Account equity</p>
+          <h3 className="text-lg font-semibold text-white">Account equity</h3>
+          <p className="text-xs text-ink-muted">
+            {showDrawdown ? 'Drawdown from peak' : 'End-of-day account equity'}
+            {rangeSummary ? ` · ${rangeSummary.days}` : ''}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -160,7 +304,9 @@ export function EquityChart({ data, className }: EquityChartProps) {
             aria-pressed={!showDrawdown}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-              !showDrawdown ? 'bg-[rgb(var(--accent-info)/0.2)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.4)]' : 'bg-white/5 text-ink-muted border-white/10'
+              !showDrawdown
+                ? 'bg-[rgb(var(--accent-low)/0.2)] text-[rgb(var(--accent-low))] border-[rgb(var(--accent-low)/0.5)] shadow-[0_0_18px_rgb(var(--accent-glow)/0.25)]'
+                : 'bg-white/5 text-ink-muted border-white/10'
             )}
           >
             Equity
@@ -170,7 +316,9 @@ export function EquityChart({ data, className }: EquityChartProps) {
             aria-pressed={showDrawdown}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-              showDrawdown ? 'bg-red-500/20 text-red-300 border-red-400/40' : 'bg-white/5 text-ink-muted border-white/10'
+              showDrawdown
+                ? 'bg-[rgb(var(--accent-danger)/0.2)] text-[rgb(var(--accent-danger))] border-[rgb(var(--accent-danger)/0.5)] shadow-[0_0_18px_rgb(var(--accent-danger)/0.25)]'
+                : 'bg-white/5 text-ink-muted border-white/10'
             )}
           >
             Drawdown
@@ -178,29 +326,68 @@ export function EquityChart({ data, className }: EquityChartProps) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {timeframes.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setTimeframe(option.value)}
-            aria-pressed={timeframe === option.value}
-            className={cn(
-              'px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider transition-all border',
-              timeframe === option.value
-                ? 'bg-[rgb(var(--accent-info)/0.22)] text-[rgb(var(--accent-info))] border-[rgb(var(--accent-info)/0.5)] shadow-[0_0_18px_rgb(var(--accent-glow)/0.35)]'
-                : 'bg-white/5 text-ink-muted border-white/10 hover:border-white/20'
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
+      {headerStats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-ink-muted">Start equity</p>
+            <p className="text-sm font-semibold text-white tabular-nums">{formatMoney(headerStats.startEquity)}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-ink-muted">End equity</p>
+            <p className="text-sm font-semibold text-white tabular-nums">{formatMoney(headerStats.endEquity)}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-ink-muted">Net change</p>
+            <p className={cn('text-sm font-semibold tabular-nums', netTone)}>
+              {headerStats.net >= 0 ? '+' : ''}
+              {formatMoney(headerStats.net)}
+            </p>
+            <p className={cn('text-[11px] tabular-nums', netTone)}>
+              {headerStats.netPct >= 0 ? '+' : ''}
+              {(headerStats.netPct * 100).toFixed(2)}%
+            </p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-ink-muted">Max drawdown</p>
+            <p className="text-sm font-semibold text-[rgb(var(--accent-danger))] tabular-nums">
+              {(headerStats.maxDrawdownPct * 100).toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-4">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-2 px-2">
+          {timeframes.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setTimeframe(option.value)}
+              aria-pressed={timeframe === option.value}
+              className={cn(
+                'shrink-0 px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-wider transition-all border',
+                timeframe === option.value
+                  ? 'bg-[rgb(var(--accent-low)/0.22)] text-[rgb(var(--accent-low))] border-[rgb(var(--accent-low)/0.6)] shadow-[0_0_18px_rgb(var(--accent-glow)/0.35)]'
+                  : 'bg-white/5 text-ink-muted border-white/10 hover:border-white/20'
+              )}
+            >
+              {option.value === 'CUSTOM' ? option.label : presetLabel(option.value)}
+            </button>
+          ))}
+        </div>
+        {rangeSummary && (
+          <div className="mt-2 text-[11px] text-ink-muted space-y-1">
+            <div>Applied: {rangeSummary.applied}</div>
+            <div>{rangeSummary.days}</div>
+            {rangeSummary.note && <div className="text-amber-200">{rangeSummary.note}</div>}
+          </div>
+        )}
       </div>
 
       {timeframe === 'CUSTOM' && (
         <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.02] p-4 max-h-64 overflow-y-auto">
           <p className="text-xs text-ink-muted mb-3">
-            Choose a custom date range for account equity. Dates must be in chronological order.
+            Choose a custom date range. Dates must be valid and in chronological order.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -212,7 +399,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
                 type="date"
                 value={customStart}
                 onChange={(event) => setCustomStart(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/30"
+                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgb(var(--accent-low)/0.6)] focus:ring-2 focus:ring-[rgb(var(--accent-glow)/0.25)]"
               />
             </div>
             <div>
@@ -224,7 +411,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
                 type="date"
                 value={customEnd}
                 onChange={(event) => setCustomEnd(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/30"
+                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white focus:outline-none focus:border-[rgb(var(--accent-low)/0.6)] focus:ring-2 focus:ring-[rgb(var(--accent-glow)/0.25)]"
               />
             </div>
           </div>
@@ -233,19 +420,41 @@ export function EquityChart({ data, className }: EquityChartProps) {
             <button
               type="button"
               onClick={() => {
-                const startDate = parseDateInput(customStart);
-                const endDate = parseDateInput(customEnd);
-                if (endDate) {
-                  endDate.setHours(23, 59, 59, 999);
+                if (!dataRange) {
+                  setCustomError('No data available to apply a custom range.');
+                  return;
                 }
-                if (!isValidRange(startDate, endDate)) {
+                const startKey = normalizeDateKey(customStart);
+                const endKey = normalizeDateKey(customEnd);
+                if (!startKey || !endKey) {
+                  setCustomError('Enter valid dates (YYYY-MM-DD or MM/DD/YYYY).');
+                  return;
+                }
+                const startEpoch = isoToEpochDay(startKey);
+                const endEpoch = isoToEpochDay(endKey);
+                if (startEpoch > endEpoch) {
                   setCustomError('Start date must be before or equal to end date.');
                   return;
                 }
+                const clampedStart = clampEpochDay(startEpoch, dataRange.startEpoch, dataRange.endEpoch);
+                const clampedEnd = clampEpochDay(endEpoch, dataRange.startEpoch, dataRange.endEpoch);
+                if (clampedStart > clampedEnd) {
+                  setCustomError('Selected range is outside the available data.');
+                  return;
+                }
                 setCustomError(null);
-                setAppliedCustomRange({ start: startDate!, end: endDate! });
+                setCustomStart(startKey);
+                setCustomEnd(endKey);
+                setAppliedCustomRange({
+                  startEpoch: clampedStart,
+                  endEpoch: clampedEnd,
+                  startKey: epochDayToIso(clampedStart),
+                  endKey: epochDayToIso(clampedEnd),
+                  daysShown: clampedEnd - clampedStart + 1,
+                  clamped: clampedStart !== startEpoch || clampedEnd !== endEpoch,
+                });
               }}
-              className="rounded-lg border border-[rgb(var(--accent-info)/0.5)] bg-[rgb(var(--accent-info)/0.2)] px-3 py-2 text-xs font-semibold text-[rgb(var(--accent-info))] transition-all hover:bg-[rgb(var(--accent-info)/0.3)]"
+              className="rounded-lg border border-[rgb(var(--accent-low)/0.6)] bg-[rgb(var(--accent-low)/0.2)] px-3 py-2 text-xs font-semibold text-[rgb(var(--accent-low))] transition-all hover:bg-[rgb(var(--accent-low)/0.3)]"
             >
               Apply range
             </button>
@@ -253,11 +462,16 @@ export function EquityChart({ data, className }: EquityChartProps) {
               type="button"
               onClick={() => {
                 if (!dataRange) return;
-                const resetEnd = new Date(dataRange.end);
-                resetEnd.setHours(23, 59, 59, 999);
-                setCustomStart(toISODate(dataRange.start));
-                setCustomEnd(toISODate(dataRange.end));
-                setAppliedCustomRange({ start: dataRange.start, end: resetEnd });
+                setCustomStart(dataRange.startKey);
+                setCustomEnd(dataRange.endKey);
+                setAppliedCustomRange({
+                  startEpoch: dataRange.startEpoch,
+                  endEpoch: dataRange.endEpoch,
+                  startKey: dataRange.startKey,
+                  endKey: dataRange.endKey,
+                  daysShown: dataRange.totalDays,
+                  clamped: false,
+                });
                 setCustomError(null);
               }}
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-ink-muted hover:text-white"
@@ -265,6 +479,13 @@ export function EquityChart({ data, className }: EquityChartProps) {
               Reset to full range
             </button>
           </div>
+          {appliedCustomRange && (
+            <div className="mt-3 text-[11px] text-ink-muted space-y-1">
+              <div>Applied: {appliedCustomRange.startKey} → {appliedCustomRange.endKey}</div>
+              <div>{appliedCustomRange.daysShown} days shown</div>
+              {appliedCustomRange.clamped && <div className="text-amber-200">Clamped to available data.</div>}
+            </div>
+          )}
         </div>
       )}
 
@@ -283,9 +504,9 @@ export function EquityChart({ data, className }: EquityChartProps) {
               }}
             >
               <defs>
-                <linearGradient id="equity-line" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgb(var(--accent-high))" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="rgb(var(--accent-high))" stopOpacity="0" />
+                <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lineColor} stopOpacity="0.28" />
+                  <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
                 </linearGradient>
               </defs>
 
@@ -293,13 +514,23 @@ export function EquityChart({ data, className }: EquityChartProps) {
                 const y = PADDING.top + (1 - (tick - displayMin) / displayRange) * drawableHeight;
                 return (
                   <g key={tick}>
-                    <line x1={PADDING.left} x2={CHART_WIDTH - PADDING.right} y1={y} y2={y} stroke="rgba(255,255,255,0.08)" strokeDasharray="2,3" />
+                    <line x1={PADDING.left} x2={CHART_WIDTH - PADDING.right} y1={y} y2={y} stroke="rgba(255,255,255,0.12)" strokeDasharray="2,3" />
                   </g>
                 );
               })}
 
-              <path d={linePath} fill="none" stroke="rgb(var(--accent-high))" strokeWidth="2" />
-              <path d={`${linePath} L${points[points.length - 1].x},${CHART_HEIGHT - PADDING.bottom} L${points[0].x},${CHART_HEIGHT - PADDING.bottom} Z`} fill="url(#equity-line)" />
+              <path
+                d={linePath}
+                fill="none"
+                stroke={lineColor}
+                strokeWidth="2"
+                className="transition-all duration-[var(--motion-duration-medium)] ease-[var(--motion-ease-standard)]"
+              />
+              <path
+                d={`${linePath} L${points[points.length - 1].x},${baselineY} L${points[0].x},${baselineY} Z`}
+                fill={`url(#${areaId})`}
+                className="transition-all duration-[var(--motion-duration-medium)] ease-[var(--motion-ease-standard)]"
+              />
 
               {hoveredPoint && (
                 <g>
@@ -311,7 +542,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
                     stroke="rgba(255,255,255,0.35)"
                     strokeDasharray="3,4"
                   />
-                  <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r={4} fill="rgb(var(--accent-high))" />
+                  <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r={4} fill={lineColor} />
                 </g>
               )}
 
@@ -328,7 +559,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
                 const x = points[index].x;
                 return (
                   <text key={index} x={x} y={CHART_HEIGHT - 12} textAnchor="middle" className="fill-ink-muted text-[10px]">
-                    {filteredData[index]?.date ? formatDate(filteredData[index].date) : ''}
+                    {filteredData[index]?.dateKey ? formatDate(filteredData[index].dateKey) : ''}
                   </text>
                 );
               })}
@@ -339,17 +570,36 @@ export function EquityChart({ data, className }: EquityChartProps) {
                 className="absolute top-4 right-4 rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2 text-xs text-white shadow-lg"
                 style={{ minWidth: '160px' }}
               >
-                <p className="text-ink-muted">{formatDate(hoveredData.date)}</p>
+                <p className="text-ink-muted">{formatDate(hoveredData.dateKey)}</p>
                 <p className="text-sm font-semibold text-white">
-                  {showDrawdown
-                    ? `Drawdown ${chartData!.drawdowns[hoveredIndex ?? 0].toFixed(2)}%`
-                    : formatMoney(chartData!.values[hoveredIndex ?? 0])}
+                  {showDrawdown && hoveredDrawdown !== null
+                    ? `Drawdown ${hoveredDrawdown.toFixed(2)}%`
+                    : formatMoney(hoveredData.accountEquity)}
                 </p>
-                {hoveredData.dayPnL !== undefined && !showDrawdown && (
-                  <p className={cn('text-xs', hoveredData.dayPnL >= 0 ? 'text-emerald-300' : 'text-red-300')}>
-                    Day {hoveredData.dayPnL >= 0 ? '+' : ''}{formatMoney(hoveredData.dayPnL)}
-                  </p>
-                )}
+                <div className="mt-2 space-y-1 text-[11px] text-ink-muted">
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Account equity</span>
+                    <span className="text-white tabular-nums">{formatMoney(hoveredData.accountEquity)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Net change</span>
+                    <span className={cn('tabular-nums', (equityDelta ?? 0) >= 0 ? 'text-emerald-300' : 'text-red-300')}>
+                      {equityDelta === null ? '—' : `${equityDelta >= 0 ? '+' : ''}${formatMoney(equityDelta)}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Trades P/L delta</span>
+                    <span className={cn('tabular-nums', (tradingDelta ?? 0) >= 0 ? 'text-emerald-300' : 'text-red-300')}>
+                      {tradingDelta === null ? '—' : `${tradingDelta >= 0 ? '+' : ''}${formatMoney(tradingDelta)}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Adjustments delta</span>
+                    <span className={cn('tabular-nums', (adjustmentDelta ?? 0) >= 0 ? 'text-emerald-300' : 'text-red-300')}>
+                      {adjustmentDelta === null ? '—' : `${adjustmentDelta >= 0 ? '+' : ''}${formatMoney(adjustmentDelta)}`}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
           </>
@@ -360,10 +610,18 @@ export function EquityChart({ data, className }: EquityChartProps) {
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[10px] text-ink-muted">
-        <span>Y: {showDrawdown ? 'Drawdown %' : 'Equity ($)'}</span>
-        <span>X: Date</span>
-      </div>
+      {import.meta.env.DEV && (
+        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-[10px] text-ink-muted space-y-1">
+          <div>Dataset: {dataRange ? `${dataRange.startKey} → ${dataRange.endKey}` : '—'} · invalid keys: {invalidKeyCount}</div>
+          <div>Selected range: {timeframe}</div>
+          <div>
+            Applied range: {activeRange ? `${activeRange.startKey} → ${activeRange.endKey}` : '—'}
+            {activeRange?.clamped ? ' (clamped)' : ''}
+          </div>
+          <div>Points shown: {filteredData.length}</div>
+        </div>
+      )}
+
     </Card>
   );
 }

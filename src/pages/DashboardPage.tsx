@@ -379,7 +379,7 @@ export function DashboardPage() {
   })();
 
   const drawdownColor = () => {
-    const pct = Math.min(Math.max(metrics.maxDrawdownPct * 100, 0), 60);
+    const pct = Math.min(Math.abs(metrics.maxDrawdownPct) * 100, 60);
     const ratio = pct / 60;
     const start = { r: 126, g: 144, b: 198 };
     const end = { r: 248, g: 113, b: 113 };
@@ -780,7 +780,7 @@ export function DashboardPage() {
               <KPIItem label="Avg loss" value={formatMoney(metrics.avgLoss)} tone={performanceTone} />
               <KPIItem
                 label="Max drawdown"
-                value={formatPercent(metrics.maxDrawdownPct, 1)}
+                value={formatPercent(Math.abs(metrics.maxDrawdownPct), 1)}
                 tone="neutral"
                 style={{ color: drawdownColor() }}
               />

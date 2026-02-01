@@ -1,5 +1,6 @@
 import type { Fill, Trade, ClosedTradeOutcome, TradeWithRisk, PendingOrder, RiskStateSnapshot } from './types';
 import { hashString } from '../lib/hash';
+import { toETDateKey } from '../lib/dateKey';
 
 // ============================================================================
 // TYPES
@@ -442,7 +443,7 @@ export function buildTrades(
         riskPercent: riskPctAtEntry * 100,
         stopPrice: stopInfo.inferredStop,
         outcome: 'ACTIVE',
-        marketDate: pos.entryFills[0]?.marketDate || entryDate.toISOString().split('T')[0],
+        marketDate: pos.entryFills[0]?.marketDate || toETDateKey(entryDate),
         durationMinutes: null,
         // Extended fields
         riskPctAtEntry,

@@ -48,6 +48,18 @@ describe("Webull parser + trade builder", () => {
     expect(trades[0].realizedPnL).toBe(10);
   });
 
+  test("marketDate is derived from the CSV date portion", () => {
+    const csv = buildCsv([
+      "NFLX,BUY,Filled,1,500.00,01/22/2026 23:59:00 EST,0",
+      "NFLX,SELL,Filled,1,510.00,01/22/2026 23:59:30 EST,0",
+    ]);
+
+    const parsed = parseWebullCSV(csv);
+
+    expect(parsed.fills[0].marketDate).toBe("2026-01-22");
+    expect(parsed.fills[1].marketDate).toBe("2026-01-22");
+  });
+
   test("calculates short P&L correctly", () => {
     const csv = buildCsv([
       "TSLA,SELL,Filled,5,20.00,01/22/2026 09:31:00 EST,0",

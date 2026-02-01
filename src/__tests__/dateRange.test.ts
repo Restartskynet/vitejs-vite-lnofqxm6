@@ -10,9 +10,9 @@ describe('dateRange utilities', () => {
   test('parseDateInput returns a valid Date for ISO input', () => {
     const parsed = parseDateInput('2026-01-15');
     expect(parsed).not.toBeNull();
-    expect(parsed?.getFullYear()).toBe(2026);
-    expect(parsed?.getMonth()).toBe(0);
-    expect(parsed?.getDate()).toBe(15);
+    expect(parsed?.getUTCFullYear()).toBe(2026);
+    expect(parsed?.getUTCMonth()).toBe(0);
+    expect(parsed?.getUTCDate()).toBe(15);
   });
 
   test('isValidRange enforces start before end', () => {

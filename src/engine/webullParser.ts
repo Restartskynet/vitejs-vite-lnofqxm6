@@ -11,6 +11,7 @@ import type {
   PendingOrder
 } from './types';
 import { generateFillFingerprint, generateFillId } from '../lib/hash';
+import { epochDayToIso, isoToEpochDay, normalizeDateKey, toETDateKey } from '../lib/dateKey';
 
 // ============================================================================
 // COLUMN ALIASES FOR MULTI-FORMAT SUPPORT
@@ -259,8 +260,11 @@ function parseWebullDate(dateStr: string): Date | null {
   return isNaN(parsed) ? null : new Date(parsed);
 }
 
-function getMarketDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+function extractDateKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const match = raw.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4}/);
+  if (!match) return null;
+  return normalizeDateKey(match[0]);
 }
 
 function parseNumber(raw: string | undefined | null): number | null {
@@ -429,8 +433,8 @@ export function parseWebullCSV(text: string): ImportResultExtended {
   
   // Parse data rows
   const symbols = new Set<string>();
-  let minDate: Date | null = null;
-  let maxDate: Date | null = null;
+  let minEpochDay: number | null = null;
+  let maxEpochDay: number | null = null;
   
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -555,6 +559,15 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     const orderId = orderIdRaw || `auto_${fingerprint.substring(0, 12)}`;
     
     // Create fill
+    let marketDate = extractDateKey(timeRaw);
+    if (!marketDate) {
+      warnings.push({
+        row: rowNum,
+        message: `Invalid market date in filled time: "${timeRaw}". Falling back to ET date.`,
+      });
+      marketDate = toETDateKey(filledTime!);
+    }
+
     const fill: Fill & { fingerprint: string } = {
       id: fillId,
       symbol: symbol!,
@@ -564,7 +577,7 @@ export function parseWebullCSV(text: string): ImportResultExtended {
       filledTime: filledTime!,
       orderId,
       commission,
-      marketDate: getMarketDate(filledTime!),
+      marketDate,
       rowIndex: i - 1,
       stopPrice: stopPrice ?? null,
       fingerprint,
@@ -574,8 +587,9 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     symbols.add(symbol!);
     
     // Track date range
-    if (!minDate || filledTime! < minDate) minDate = filledTime!;
-    if (!maxDate || filledTime! > maxDate) maxDate = filledTime!;
+    const epochDay = isoToEpochDay(marketDate);
+    if (minEpochDay === null || epochDay < minEpochDay) minEpochDay = epochDay;
+    if (maxEpochDay === null || epochDay > maxEpochDay) maxEpochDay = epochDay;
   }
   
   // Sort fills by time with stable row order tie-breaker
@@ -585,8 +599,8 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     return a.rowIndex - b.rowIndex;
   });
   
-  const dateRange = minDate && maxDate
-    ? { start: getMarketDate(minDate), end: getMarketDate(maxDate) }
+  const dateRange = minEpochDay !== null && maxEpochDay !== null
+    ? { start: epochDayToIso(minEpochDay), end: epochDayToIso(maxEpochDay) }
     : null;
   
   // Summary warning for skipped rows

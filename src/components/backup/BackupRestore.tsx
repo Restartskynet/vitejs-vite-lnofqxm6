@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button, Badge } from '../ui';
 import { Modal } from '../ui/Modal';
+import { toETDateKey } from '../../lib/dateKey';
 import type { PersistedFill, PersistedData, PersistedAdjustment, ImportHistoryEntry, Settings, PersistedPendingOrder } from '../../types';
 import { CURRENT_SCHEMA_VERSION } from '../../types';
 
@@ -41,7 +42,7 @@ export function BackupRestore({ fills, settings, importHistory, adjustments, pen
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `restart-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `restart-backup-${toETDateKey(new Date())}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
