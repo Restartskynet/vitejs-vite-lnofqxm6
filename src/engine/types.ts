@@ -29,11 +29,14 @@ export interface Fill {
   quantity: number;
   price: number;
   filledTime: Date;
+  placedTime?: Date | null;
   orderId: string;
   commission: number;
   marketDate: string; // YYYY-MM-DD in ET
   rowIndex: number;
   stopPrice?: number | null;
+  totalQuantity?: number | null;
+  status?: string | null;
 }
 /**
  * Trade status
@@ -55,11 +58,13 @@ export interface Trade {
   
   // Entry
   entryDate: Date;
+  entryDayKey: string;
   entryPrice: number;
   entryFills: Fill[];
   
   // Exit (for closed trades)
   exitDate: Date | null;
+  exitDayKey: string | null;
   exitPrice: number | null;
   exitFills: Fill[];
   
@@ -78,6 +83,10 @@ export interface Trade {
   riskUsed: number;
   riskPercent: number;
   stopPrice: number | null;
+  modeAtEntry: 'HIGH' | 'LOW';
+  riskPctAtEntry: number;
+  equityAtEntry: number;
+  riskDollarsAtEntry: number;
   
   // Classification
   outcome: ClosedTradeOutcome | 'ACTIVE';
@@ -198,6 +207,7 @@ export interface ImportResultExtended extends ImportResult {
   detectedFormat: WebullCSVFormat;
   skippedRows: SkippedRow[];
   pendingOrders: PendingOrder[];
+  orders?: OrderRecord[];
 }
 
 /**
@@ -212,6 +222,24 @@ export interface PendingOrder {
   quantity: number;
   placedTime: Date;
   type: 'STOP' | 'LIMIT' | 'MARKET' | 'UNKNOWN';
+  status?: 'PENDING' | 'CANCELLED' | 'FILLED' | 'UNKNOWN';
+}
+
+/**
+ * Normalized order record from Webull Orders Records CSV
+ */
+export interface OrderRecord {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  status: string;
+  filledQty: number | null;
+  totalQty: number | null;
+  price: number | null;
+  stopPrice: number | null;
+  avgPrice: number | null;
+  placedTime: Date | null;
+  filledTime: Date | null;
+  rowIndex: number;
 }
 
 /**
@@ -235,9 +263,6 @@ export interface RiskStateSnapshot {
  * Extended Trade with risk annotation
  */
 export interface TradeWithRisk extends Trade {
-  riskPctAtEntry: number;
-  equityAtEntry: number;
-  riskDollarsAtEntry: number;
   inferredStop: number | null;
   pendingExit: number | null;
   stopSource: 'user' | 'none';

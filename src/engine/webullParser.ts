@@ -8,7 +8,8 @@ import type {
   CSVPreviewExtended,
   ImportResultExtended,
   SkippedRow,
-  PendingOrder
+  PendingOrder,
+  OrderRecord
 } from './types';
 import { generateFillFingerprint, generateFillId } from '../lib/hash';
 import { epochDayToIso, isoToEpochDay, normalizeDateKey, toETDateKey } from '../lib/dateKey';
@@ -202,18 +203,44 @@ function detectFormat(headers: string[]): { format: WebullCSVFormat; confidence:
  */
 function parseWebullDate(dateStr: string): Date | null {
   if (!dateStr) return null;
-  
+
   const cleaned = dateStr.trim();
-  
+
   // Webull formats:
   // "01/22/2026 09:53:04 EST"
   // "01/22/2026 09:53:04"
   // "2026-01-22 09:53:04"
   // "01/22/2026"
-  
+
+  const withTz = cleaned.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:\s+([A-Z]{2,4}))?$/
+  );
+
+  if (withTz) {
+    const [, mmRaw, ddRaw, yyyyRaw, hhRaw, miRaw, ssRaw, tzRaw] = withTz;
+    const month = Number(mmRaw);
+    const day = Number(ddRaw);
+    const year = Number(yyyyRaw);
+    const hour = Number(hhRaw);
+    const minute = Number(miRaw);
+    const second = Number(ssRaw);
+    const tz = (tzRaw ?? '').toUpperCase();
+
+    let offsetHours: number | null = null;
+    if (tz === 'EST') offsetHours = 5;
+    if (tz === 'EDT') offsetHours = 4;
+
+    if (offsetHours !== null) {
+      const utc = Date.UTC(year, month - 1, day, hour + offsetHours, minute, second);
+      const date = new Date(utc);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    const date = new Date(year, month - 1, day, hour, minute, second);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
   const patterns = [
-    // MM/DD/YYYY HH:MM:SS TZ
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:\s+\w+)?$/,
     // YYYY-MM-DD HH:MM:SS
     /^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$/,
     // MM/DD/YYYY
@@ -221,16 +248,15 @@ function parseWebullDate(dateStr: string): Date | null {
     // YYYY-MM-DD
     /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
   ];
-  
+
   for (const pattern of patterns) {
     const match = cleaned.match(pattern);
     if (match) {
       try {
         let year: number, month: number, day: number;
         let hour = 9, minute = 30, second = 0; // Default to market open
-        
+
         if (pattern.source.startsWith('^(\\d{4})')) {
-          // ISO format
           [, year, month, day] = match.map(Number) as [unknown, number, number, number];
           if (match[4]) {
             hour = Number(match[4]);
@@ -238,26 +264,19 @@ function parseWebullDate(dateStr: string): Date | null {
             second = Number(match[6]);
           }
         } else {
-          // US format
           [, month, day, year] = match.map(Number) as [unknown, number, number, number];
-          if (match[4]) {
-            hour = Number(match[4]);
-            minute = Number(match[5]);
-            second = Number(match[6]);
-          }
         }
-        
+
         const date = new Date(year, month - 1, day, hour, minute, second);
-        if (!isNaN(date.getTime())) return date;
+        if (!Number.isNaN(date.getTime())) return date;
       } catch {
         continue;
       }
     }
   }
-  
-  // Fallback
+
   const parsed = Date.parse(cleaned);
-  return isNaN(parsed) ? null : new Date(parsed);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
 }
 
 function extractDateKey(raw: string | null | undefined): string | null {
@@ -369,6 +388,7 @@ export function parseWebullCSV(text: string): ImportResultExtended {
   const fills: Fill[] = [];
   const skippedRows: SkippedRow[] = [];
   const pendingOrders: PendingOrder[] = [];
+  const orders: OrderRecord[] = [];
   
   // Detect format
   const { format, confidence } = detectFormat(headers);
@@ -436,6 +456,15 @@ export function parseWebullCSV(text: string): ImportResultExtended {
   let minEpochDay: number | null = null;
   let maxEpochDay: number | null = null;
   
+  const normalizeStatus = (value: string | undefined | null): string => {
+    const normalized = (value ?? '').trim().toLowerCase();
+    if (!normalized) return 'unknown';
+    return normalized;
+  };
+
+  const isFilledStatus = (status: string): boolean =>
+    status === 'filled' || status === 'partial' || status === 'partially filled';
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 1;
@@ -452,22 +481,44 @@ export function parseWebullCSV(text: string): ImportResultExtended {
       rawData[h] = row[idx] || '';
     });
     
-    // Check status - skip non-filled orders but track them for pending inference
+    // Normalize status once (used for both fills and pending orders)
     const statusCol = colIdx['Status'];
-    const status = statusCol >= 0 ? row[statusCol]?.trim().toLowerCase() : 'filled';
-    
-    if (status && status !== 'filled' && status !== 'partial' && status !== 'partially filled') {
+    const status = normalizeStatus(statusCol >= 0 ? row[statusCol]?.trim() : 'filled');
+
+    const symbolRaw = row[colIdx['Symbol']]?.trim().toUpperCase();
+    const sideRaw = row[colIdx['Side']]?.trim().toUpperCase();
+    const placedTimeRaw = colIdx['Placed Time'] >= 0 ? row[colIdx['Placed Time']] : null;
+    const filledTimeRaw = colIdx['Filled Time'] >= 0 ? row[colIdx['Filled Time']] : null;
+    const placedTime = placedTimeRaw ? parseWebullDate(placedTimeRaw) : null;
+    const filledTime = filledTimeRaw ? parseWebullDate(filledTimeRaw) : null;
+    const totalQty = parseNumber(row[colIdx['Total Qty']]);
+    const filledQty = parseNumber(row[colIdx['Filled Qty']]);
+    const avgPrice = parseNumber(row[colIdx['Avg Price']]);
+    const limitPrice = parseNumber(row[colIdx['Limit Price']]);
+    const stopPrice = parseNumber(row[colIdx['Stop Price']]);
+    const orderPrice = colIdx['Price'] >= 0 ? parseNumber(row[colIdx['Price']]) : null;
+
+    if (symbolRaw && sideRaw) {
+      orders.push({
+        symbol: symbolRaw,
+        side: sideRaw.includes('BUY') ? 'BUY' : 'SELL',
+        status,
+        filledQty: filledQty ?? null,
+        totalQty: totalQty ?? null,
+        price: orderPrice ?? null,
+        stopPrice: stopPrice ?? null,
+        avgPrice: avgPrice ?? null,
+        placedTime,
+        filledTime,
+        rowIndex: i - 1,
+      });
+    }
+
+    if (!isFilledStatus(status)) {
       // Track cancelled/pending orders for stop/exit info (do not infer)
-      if (status === 'pending' || status === 'working' || status === 'open') {
-        const pendingSymbol = row[colIdx['Symbol']]?.trim().toUpperCase();
-        const pendingSide = row[colIdx['Side']]?.trim().toUpperCase();
-        const limitPrice = parseNumber(row[colIdx['Limit Price']]);
-        const stopPrice = parseNumber(row[colIdx['Stop Price']]);
-        const avgPrice = parseNumber(row[colIdx['Avg Price']]);
-        const orderPrice = colIdx['Price'] >= 0 ? parseNumber(row[colIdx['Price']]) : null;
-        const pendingQty = parseNumber(row[colIdx['Total Qty']]) ?? parseNumber(row[colIdx['Filled Qty']]);
-        const placedTimeRaw = colIdx['Placed Time'] >= 0 ? row[colIdx['Placed Time']] : null;
-        const placedTime = placedTimeRaw ? parseWebullDate(placedTimeRaw) : new Date();
+      if (status === 'pending' || status === 'working' || status === 'open' || status === 'cancelled') {
+        const pendingSymbol = symbolRaw;
+        const pendingSide = sideRaw;
         const orderType = colIdx['Order Type'] >= 0 ? row[colIdx['Order Type']]?.trim().toUpperCase() : 'UNKNOWN';
         const pendingType = orderType?.includes('STOP') ? 'STOP' : 
           orderType?.includes('LIMIT') ? 'LIMIT' : 
@@ -481,9 +532,10 @@ export function parseWebullCSV(text: string): ImportResultExtended {
             price: pendingPrice,
             stopPrice: stopPrice ?? null,
             limitPrice: limitPrice ?? null,
-            quantity: pendingQty ?? 0,
+            quantity: totalQty ?? filledQty ?? 0,
             placedTime,
             type: pendingType,
+            status: status === 'cancelled' ? 'CANCELLED' : 'PENDING',
           });
         }
       }
@@ -495,11 +547,10 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     }
     
     // Extract values
-    const symbol = row[colIdx['Symbol']]?.trim().toUpperCase();
-    const sideRaw = row[colIdx['Side']]?.trim().toUpperCase();
+    const symbol = symbolRaw;
     const qtyRaw = row[colIdx['Filled Qty']]?.trim();
     const priceRaw = row[colIdx['Avg Price']]?.trim();
-    const timeRaw = row[colIdx['Filled Time']]?.trim();
+    const timeRaw = filledTimeRaw?.trim();
     const orderIdRaw = colIdx['Order No.'] >= 0 ? row[colIdx['Order No.']]?.trim() : '';
     const commissionRaw = colIdx['Commission'] >= 0 ? row[colIdx['Commission']]?.trim() : '0';
     
@@ -531,7 +582,6 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     }
     
     // Validate time
-    const filledTime = parseWebullDate(timeRaw || '');
     if (!filledTime) {
       rowReasons.push(`Invalid filled time: "${timeRaw}"`);
     }
@@ -549,7 +599,6 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     
     // Parse commission (optional)
     const commission = Math.abs(parseNumber(commissionRaw) ?? 0);
-    const stopPrice = parseNumber(colIdx['Stop Price'] >= 0 ? row[colIdx['Stop Price']] : null);
     
     // Generate fingerprint for deduplication and orderId
     const fingerprint = generateFillFingerprint(symbol!, side!, quantity, price, filledTime);
@@ -575,11 +624,14 @@ export function parseWebullCSV(text: string): ImportResultExtended {
       quantity,
       price,
       filledTime: filledTime!,
+      placedTime,
       orderId,
       commission,
       marketDate,
       rowIndex: i - 1,
       stopPrice: stopPrice ?? null,
+      totalQuantity: totalQty ?? null,
+      status,
       fingerprint,
     };
     
@@ -626,5 +678,6 @@ export function parseWebullCSV(text: string): ImportResultExtended {
     detectedFormat: format,
     skippedRows,
     pendingOrders,
+    orders,
   };
 }

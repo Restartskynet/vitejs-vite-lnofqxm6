@@ -1,30 +1,44 @@
-import type { Fill, Trade, ClosedTradeOutcome, TradeWithRisk, PendingOrder, RiskStateSnapshot } from './types';
+import type {
+  Fill,
+  Trade,
+  ClosedTradeOutcome,
+  TradeWithRisk,
+  PendingOrder,
+  RiskStateSnapshot,
+  OrderRecord,
+} from './types';
 import { hashString } from '../lib/hash';
 import { toETDateKey } from '../lib/dateKey';
+import { applyDailyDirectives } from './riskEngine';
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const PLACED_TIME_PAIR_WINDOW_MS = 2_000;
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-interface OpenPosition {
+interface TradeUnit {
+  key: string;
   symbol: string;
-  side: 'LONG' | 'SHORT';
-  quantity: number;
-  avgEntryPrice: number;
+  entryOrders: OrderRecord[];
   entryFills: Fill[];
   exitFills: Fill[];
-  firstEntryTime: Date;
-  totalCommission: number;
-}
-
-interface RiskEngineState {
-  mode: 'HIGH' | 'LOW';
-  lowWinsProgress: number;
-  equity: number;
+  protectiveStopOrders: OrderRecord[];
+  activeStop: OrderRecord | null;
+  entryPlacedTime: Date;
+  entryTime: Date;
+  entryDayKey: string;
+  entryPrice: number;
+  entryQty: number;
+  remainingQty: number;
 }
 
 // ============================================================================
-// HELPER FUNCTIONS
+// HELPERS
 // ============================================================================
 
 function generateTradeId(symbol: string, entryTime: Date, index: number): string {
@@ -47,425 +61,419 @@ function durationMinutes(start: Date, end: Date): number {
   return Math.round((end.getTime() - start.getTime()) / 60000);
 }
 
-/**
- * Determine outcome based on P&L and open status.
- * Uses function overloads for proper type narrowing:
- * - When isOpen is true (literal), returns 'ACTIVE'
- * - When isOpen is false (literal), returns ClosedTradeOutcome
- */
 function determineOutcome(pnl: number, isOpen: true): 'ACTIVE';
 function determineOutcome(pnl: number, isOpen: false): ClosedTradeOutcome;
 function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'ACTIVE';
 function determineOutcome(pnl: number, isOpen: boolean): ClosedTradeOutcome | 'ACTIVE' {
   if (isOpen) return 'ACTIVE';
-  // Use small threshold to avoid floating point issues
-  if (pnl > 0.005) return 'WIN';
-  if (pnl < -0.005) return 'LOSS';
-  return 'BREAKEVEN';
+  return pnl >= 0 ? 'WIN' : 'LOSS';
 }
 
-/**
- * Apply risk state transition based on trade outcome
- */
-function applyRiskTransition(
-  state: RiskEngineState, 
-  outcome: ClosedTradeOutcome,
-  pnl: number
-): RiskEngineState {
-  const newState = { ...state };
-  
-  // Update equity
-  newState.equity += pnl;
-  
-  // BREAKEVEN - no state change
-  if (outcome === 'BREAKEVEN') {
-    return newState;
-  }
-  
-  if (newState.mode === 'HIGH') {
-    // In HIGH mode: 1 LOSS drops to LOW
-    if (outcome === 'LOSS') {
-      newState.mode = 'LOW';
-      newState.lowWinsProgress = 0;
-    }
-    // WINs in HIGH don't accumulate
-  } else {
-    // In LOW mode
-    if (outcome === 'WIN') {
-      newState.lowWinsProgress += 1;
-      // 2 wins returns to HIGH
-      if (newState.lowWinsProgress >= 2) {
-        newState.mode = 'HIGH';
-        newState.lowWinsProgress = 0;
-      }
-    } else if (outcome === 'LOSS') {
-      // LOSS resets progress but stays in LOW
-      newState.lowWinsProgress = 0;
-    }
-  }
-  
-  return newState;
-}
-
-/**
- * Find pending stop/exit orders without inference
- */
-function findInferredStop(
-  symbol: string,
-  side: 'LONG' | 'SHORT',
-  entryPrice: number,
-  entryTime: Date,
-  pendingOrders: PendingOrder[]
-): { inferredStop: number | null; pendingExit: number | null; stopSource: 'user' | 'none' } {
-  // Find pending orders for this symbol placed after entry
-  const relevantPending = pendingOrders.filter(po => 
-    po.symbol === symbol && 
-    po.placedTime >= entryTime
-  );
-  
-  if (relevantPending.length === 0) {
-    return { inferredStop: null, pendingExit: null, stopSource: 'none' };
-  }
-  
-  let inferredStop: number | null = null;
-  let pendingExit: number | null = null;
-  let stopSource: 'user' | 'none' = 'none';
-  const exitSide = side === 'LONG' ? 'SELL' : 'BUY';
-
-  const pickStop = (candidate: number, source: 'user' | 'none') => {
-    if (inferredStop === null) {
-      inferredStop = candidate;
-      stopSource = source;
-      return;
-    }
-    if (side === 'LONG') {
-      if (candidate > inferredStop) {
-        inferredStop = candidate;
-        stopSource = source;
-      }
-      return;
-    }
-    if (candidate < inferredStop) {
-      inferredStop = candidate;
-      stopSource = source;
-    }
-  };
-
-  const pickPendingExit = (candidate: number) => {
-    if (pendingExit === null) {
-      pendingExit = candidate;
-      return;
-    }
-    if (side === 'LONG') {
-      if (candidate < pendingExit) pendingExit = candidate;
-      return;
-    }
-    if (candidate > pendingExit) pendingExit = candidate;
-  };
-  
-  for (const po of relevantPending) {
-    if (po.side !== exitSide) continue;
-    if (po.type === 'STOP' && po.stopPrice !== null) {
-      pickStop(po.stopPrice, 'user');
-      continue;
-    }
-    if (po.type === 'LIMIT' && po.price !== null) {
-      pickPendingExit(po.price);
-      continue;
-    }
-    if (po.price !== null) {
-      const isStopCandidate = side === 'LONG' ? po.price <= entryPrice : po.price >= entryPrice;
-      if (isStopCandidate) {
-        pickStop(po.price, 'none');
-      } else {
-        pickPendingExit(po.price);
-      }
-    }
-  }
-  
-  return { 
-    inferredStop, 
-    pendingExit, 
-    stopSource,
-  };
-}
-
-// ============================================================================
-// MAIN BUILD FUNCTION - POSITION BASED
-// ============================================================================
-
-/**
- * Build trades from fills using position-based reconstruction.
- * 
- * Algorithm:
- * 1. Sort fills by filledTime ascending
- * 2. Maintain per-symbol open position
- * 3. Trade begins when position goes from 0 → non-zero
- * 4. Entry fills add to position in same direction
- * 5. Exit fills reduce position (realize P&L on closed portion)
- * 6. Trade closes when position returns to 0
- * 7. Position flip = close prior trade, start new trade
- */
-export function buildTrades(
-  fills: Fill[], 
-  startingEquity: number = 25000,
-  pendingOrders: PendingOrder[] = []
-): { trades: TradeWithRisk[]; riskTimeline: RiskStateSnapshot[] } {
-  // Sort fills by time, then by original order for tie-breaking
-  const sortedFills = [...fills].sort((a, b) => {
-    const timeDiff = a.filledTime.getTime() - b.filledTime.getTime();
-    if (timeDiff !== 0) return timeDiff;
-    return (a.rowIndex ?? 0) - (b.rowIndex ?? 0);
+function formatETTimestampKey(date: Date): string {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
   });
-  
-  const trades: TradeWithRisk[] = [];
-  const riskTimeline: RiskStateSnapshot[] = [];
-  const positions = new Map<string, OpenPosition>();
-  
-  // Initialize risk state
-  let riskState: RiskEngineState = {
-    mode: 'HIGH',
-    lowWinsProgress: 0,
-    equity: startingEquity,
+  const parts = formatter.formatToParts(date);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? '00';
+  const year = pick('year');
+  const month = pick('month');
+  const day = pick('day');
+  const hour = pick('hour');
+  const minute = pick('minute');
+  const second = pick('second');
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+}
+
+function normalizedStatus(status: string): string {
+  return status.trim().toLowerCase();
+}
+
+function isFilledStatus(status: string): boolean {
+  const normalized = normalizedStatus(status);
+  return normalized === 'filled' || normalized === 'partial' || normalized === 'partially filled';
+}
+
+function isPendingStatus(status: string): boolean {
+  const normalized = normalizedStatus(status);
+  return normalized === 'pending' || normalized === 'working' || normalized === 'open';
+}
+
+function getPlacedTime(order: OrderRecord): Date | null {
+  return order.placedTime ?? order.filledTime ?? null;
+}
+
+function ordersWithinWindow(a: Date, b: Date): boolean {
+  return Math.abs(a.getTime() - b.getTime()) <= PLACED_TIME_PAIR_WINDOW_MS;
+}
+
+function toFillFromOrder(order: OrderRecord, fallbackId: string): Fill | null {
+  const filledTime = order.filledTime ?? order.placedTime;
+  const quantity = order.filledQty ?? order.totalQty ?? null;
+  const price = order.avgPrice ?? order.price ?? null;
+  if (!filledTime || !quantity || !price) return null;
+  return {
+    id: `order_${fallbackId}`,
+    symbol: order.symbol,
+    side: order.side,
+    quantity,
+    price,
+    filledTime,
+    placedTime: order.placedTime ?? null,
+    orderId: fallbackId,
+    commission: 0,
+    marketDate: toETDateKey(filledTime),
+    rowIndex: order.rowIndex,
+    stopPrice: null,
+    totalQuantity: order.totalQty ?? null,
+    status: order.status,
   };
-  
-  let tradeIndex = 0;
-  
-  for (const fill of sortedFills) {
-    const symbol = fill.symbol;
-    const fillSide = fill.side;
-    const fillQty = fill.quantity;
-    const fillPrice = fill.price;
-    
-    let pos = positions.get(symbol);
-    
-    // Determine if this fill opens, adds to, or reduces position
-    const isOpening = !pos || pos.quantity === 0;
-    const isSameDirection = pos && (
-      (pos.side === 'LONG' && fillSide === 'BUY') ||
-      (pos.side === 'SHORT' && fillSide === 'SELL')
+}
+
+function orderQuantity(order: OrderRecord): number | null {
+  return order.totalQty ?? order.filledQty ?? null;
+}
+
+// ============================================================================
+// MAIN BUILD FUNCTION - BRACKETED ENTRY BASED
+// ============================================================================
+
+export function buildTrades(
+  fills: Fill[],
+  startingEquity: number = 25000,
+  pendingOrders: PendingOrder[] = [],
+  orders: OrderRecord[] = []
+): { trades: TradeWithRisk[]; riskTimeline: RiskStateSnapshot[] } {
+  const fillsByRowIndex = new Map<number, Fill>();
+  for (const fill of fills) {
+    fillsByRowIndex.set(fill.rowIndex, fill);
+  }
+
+  const orderRecords: OrderRecord[] =
+    orders.length > 0
+      ? orders
+      : [
+          ...fills.map((fill) => ({
+            symbol: fill.symbol,
+            side: fill.side,
+            status: fill.status ?? 'filled',
+            filledQty: fill.quantity,
+            totalQty: fill.totalQuantity ?? fill.quantity,
+            price: fill.stopPrice ?? fill.price,
+            stopPrice: fill.stopPrice ?? null,
+            avgPrice: fill.price,
+            placedTime: fill.placedTime ?? fill.filledTime,
+            filledTime: fill.filledTime,
+            rowIndex: fill.rowIndex,
+          })),
+          ...pendingOrders.map((pending, index) => ({
+            symbol: pending.symbol,
+            side: pending.side,
+            status: pending.status === 'CANCELLED' ? 'cancelled' : 'pending',
+            filledQty: null,
+            totalQty: pending.quantity,
+            price: pending.price,
+            stopPrice: pending.stopPrice ?? pending.price ?? null,
+            avgPrice: pending.price,
+            placedTime: pending.placedTime,
+            filledTime: null,
+            rowIndex: fills.length + index + 1,
+          })),
+        ];
+
+  const hasPlacedTimes = orderRecords.some((order) => order.placedTime);
+
+  const entryOrders = orderRecords
+    .filter((order) => order.side === 'BUY' && isFilledStatus(order.status))
+    .map((order) => ({
+      ...order,
+      placedTime: getPlacedTime(order),
+    }))
+    .filter((order) => order.placedTime !== null)
+    .sort((a, b) => a.placedTime!.getTime() - b.placedTime!.getTime() || a.rowIndex - b.rowIndex);
+
+  const tradeUnits: TradeUnit[] = [];
+  const usedStopOrders = new Set<number>();
+
+  for (const entry of entryOrders) {
+    const entryPlacedTime = entry.placedTime!;
+    const entryFill =
+      fillsByRowIndex.get(entry.rowIndex) ?? toFillFromOrder(entry, `${entry.symbol}_${entry.rowIndex}`);
+    if (!entryFill) {
+      continue;
+    }
+
+    const entryQty = entryFill.quantity;
+    const entryPrice = entryFill.price;
+    const entryTime = entryFill.filledTime ?? entryPlacedTime;
+
+    const bracketStops = orderRecords.filter((order) => {
+      if (order.side !== 'SELL') return false;
+      if (!getPlacedTime(order)) return false;
+      const status = normalizedStatus(order.status);
+      if (status !== 'pending' && status !== 'working' && status !== 'open' && status !== 'cancelled' && status !== 'filled') {
+        return false;
+      }
+      if (order.symbol !== entry.symbol) return false;
+      return ordersWithinWindow(entryPlacedTime, getPlacedTime(order)!);
+    });
+
+    const entryTotalQty = orderQuantity(entry) ?? entryQty;
+    const exactQtyMatches = bracketStops.filter((order) => orderQuantity(order) === entryTotalQty);
+    const stopCandidates = exactQtyMatches.length > 0 ? exactQtyMatches : bracketStops;
+
+    if (stopCandidates.length === 0 && hasPlacedTimes) {
+      continue;
+    }
+
+    for (const stop of stopCandidates) {
+      usedStopOrders.add(stop.rowIndex);
+    }
+
+    const earliestPlaced = [entryPlacedTime, ...stopCandidates.map((stop) => getPlacedTime(stop)!)].reduce(
+      (min, current) => (current.getTime() < min.getTime() ? current : min),
+      entryPlacedTime
     );
-    
-    if (isOpening) {
-      // START NEW POSITION
-      const newSide: 'LONG' | 'SHORT' = fillSide === 'BUY' ? 'LONG' : 'SHORT';
-      
-      pos = {
-        symbol,
-        side: newSide,
-        quantity: fillQty,
-        avgEntryPrice: fillPrice,
-        entryFills: [fill],
-        exitFills: [],
-        firstEntryTime: fill.filledTime,
-        totalCommission: fill.commission,
-      };
-      positions.set(symbol, pos);
-      
-    } else if (isSameDirection) {
-      // ADD TO POSITION - recalculate average entry price
-      const newTotalQty = pos!.quantity + fillQty;
-      const newTotalCost = pos!.avgEntryPrice * pos!.quantity + fillPrice * fillQty;
-      pos!.avgEntryPrice = newTotalCost / newTotalQty;
-      pos!.quantity = newTotalQty;
-      pos!.entryFills.push(fill);
-      pos!.totalCommission += fill.commission;
-      
-    } else {
-      // REDUCING POSITION (exit fill)
-      const closingQty = Math.min(fillQty, pos!.quantity);
-      const remainingQty = pos!.quantity - closingQty;
-      const flippingQty = fillQty - closingQty;
-      const commissionRatio = fill.quantity > 0 ? closingQty / fill.quantity : 0;
-      const closingFill: Fill = {
-        ...fill,
-        id: `${fill.id}-close`,
-        quantity: closingQty,
-        commission: fill.commission * commissionRatio,
-      };
-      
-      pos!.exitFills.push(closingFill);
-      pos!.totalCommission += closingFill.commission;
-      
-      // Determine if position is now closed
-      const isClosing = remainingQty <= 0.001;
-      
-      if (isClosing || flippingQty > 0) {
-        // CREATE COMPLETED TRADE
-        const entryPrice = weightedAvgPrice(pos!.entryFills);
-        const exitPrice = weightedAvgPrice(pos!.exitFills);
-        const quantity = pos!.entryFills.reduce((sum, f) => sum + f.quantity, 0);
-        const entryDate = pos!.firstEntryTime;
-        const exitDate = fill.filledTime;
-        const commissionTotal = totalCommission(pos!.entryFills) + totalCommission(pos!.exitFills);
-        
-        let realizedPnL = 0;
-        if (pos!.side === 'LONG') {
-          realizedPnL = (exitPrice - entryPrice) * quantity;
-        } else {
-          realizedPnL = (entryPrice - exitPrice) * quantity;
+
+    const activeStop =
+      stopCandidates
+        .filter((order) => isPendingStatus(order.status))
+        .sort((a, b) => getPlacedTime(b)!.getTime() - getPlacedTime(a)!.getTime())[0] ?? null;
+
+    tradeUnits.push({
+      key: `${entry.symbol}|${formatETTimestampKey(earliestPlaced)}`,
+      symbol: entry.symbol,
+      entryOrders: [entry],
+      entryFills: [entryFill],
+      exitFills: [],
+      protectiveStopOrders: [...stopCandidates],
+      activeStop,
+      entryPlacedTime,
+      entryTime,
+      entryDayKey: toETDateKey(entryTime),
+      entryPrice,
+      entryQty,
+      remainingQty: entryQty,
+    });
+  }
+
+  const stopAdjustments = orderRecords.filter((order) => {
+    if (order.side !== 'SELL') return false;
+    if (!getPlacedTime(order)) return false;
+    const status = normalizedStatus(order.status);
+    if (status !== 'pending' && status !== 'working' && status !== 'open' && status !== 'cancelled') {
+      return false;
+    }
+    return !usedStopOrders.has(order.rowIndex);
+  });
+
+  const sellFills = fills
+    .filter((fill) => fill.side === 'SELL')
+    .sort((a, b) => a.filledTime.getTime() - b.filledTime.getTime() || a.rowIndex - b.rowIndex);
+
+  const events: Array<{ type: 'stop' | 'sell'; time: Date; order?: OrderRecord; fill?: Fill }> = [];
+  for (const stop of stopAdjustments) {
+    const placedTime = getPlacedTime(stop);
+    if (placedTime) {
+      events.push({ type: 'stop', time: placedTime, order: stop });
+    }
+  }
+  for (const fill of sellFills) {
+    events.push({ type: 'sell', time: fill.filledTime, fill });
+  }
+  events.sort((a, b) => {
+    const timeDiff = a.time.getTime() - b.time.getTime();
+    if (timeDiff !== 0) return timeDiff;
+    const aIndex = a.order?.rowIndex ?? a.fill?.rowIndex ?? 0;
+    const bIndex = b.order?.rowIndex ?? b.fill?.rowIndex ?? 0;
+    return aIndex - bIndex;
+  });
+
+  const openBySymbol = new Map<string, TradeUnit[]>();
+  for (const unit of tradeUnits) {
+    const list = openBySymbol.get(unit.symbol) ?? [];
+    list.push(unit);
+    openBySymbol.set(unit.symbol, list);
+  }
+  for (const list of openBySymbol.values()) {
+    list.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
+  }
+
+  const chooseStopTarget = (stop: OrderRecord, candidates: TradeUnit[]): TradeUnit | null => {
+    if (candidates.length === 0) return null;
+    const stopQty = orderQuantity(stop);
+    const placedTime = getPlacedTime(stop);
+    const stopPrice = stop.price ?? stop.avgPrice ?? null;
+    const scored = candidates.map((unit) => {
+      const qtyMatch = stopQty !== null && stopQty === unit.remainingQty ? 0 : stopQty !== null && stopQty === unit.entryQty ? 1 : 2;
+      const lastStopTime = unit.activeStop ? getPlacedTime(unit.activeStop) : unit.entryPlacedTime;
+      const timeDiff = placedTime && lastStopTime ? Math.abs(placedTime.getTime() - lastStopTime.getTime()) : Number.POSITIVE_INFINITY;
+      const pricePlausible = stopPrice !== null ? (stopPrice <= unit.entryPrice ? 0 : 1) : 2;
+      return { unit, qtyMatch, timeDiff, pricePlausible };
+    });
+    scored.sort((a, b) => {
+      if (a.qtyMatch !== b.qtyMatch) return a.qtyMatch - b.qtyMatch;
+      if (a.timeDiff !== b.timeDiff) return a.timeDiff - b.timeDiff;
+      if (a.pricePlausible !== b.pricePlausible) return a.pricePlausible - b.pricePlausible;
+      return a.unit.entryTime.getTime() - b.unit.entryTime.getTime();
+    });
+    return scored[0]?.unit ?? null;
+  };
+
+  for (const event of events) {
+    if (event.type === 'stop' && event.order) {
+      const stop = event.order;
+      const placedTime = getPlacedTime(stop);
+      if (!placedTime) continue;
+      const candidates = (openBySymbol.get(stop.symbol) ?? []).filter(
+        (unit) => unit.remainingQty > 0 && unit.entryTime <= placedTime
+      );
+      const target = chooseStopTarget(stop, candidates);
+      if (target) {
+        target.protectiveStopOrders.push(stop);
+        if (isPendingStatus(stop.status)) {
+          target.activeStop = stop;
+        } else if (normalizedStatus(stop.status) === 'cancelled' && target.activeStop?.rowIndex === stop.rowIndex) {
+          target.activeStop = null;
         }
-        realizedPnL -= commissionTotal;
-        
-        const costBasis = entryPrice * quantity;
-        const pnlPercent = costBasis > 0 ? (realizedPnL / costBasis) * 100 : 0;
-        
-        // Using false literal ensures TypeScript narrows to ClosedTradeOutcome
-        const outcome = determineOutcome(realizedPnL, false);
-        
-        // Record risk state BEFORE this trade closes
-        const riskPctAtEntry = riskState.mode === 'HIGH' ? 0.03 : 0.001;
-        const equityAtEntry = riskState.equity;
-        const riskDollarsAtEntry = equityAtEntry * riskPctAtEntry;
-        
-        const exitStop = pos!.exitFills.find(exitFill => exitFill.stopPrice !== null && exitFill.stopPrice !== undefined)?.stopPrice ?? null;
-        const stopSource: 'user' | 'none' = exitStop ? 'user' : 'none';
-        const stopInfo = { inferredStop: exitStop, pendingExit: null, stopSource };
-        
-        const trade: TradeWithRisk = {
-          id: generateTradeId(symbol, entryDate, tradeIndex++),
-          symbol,
-          side: pos!.side,
-          status: 'CLOSED',
-          entryDate,
-          entryPrice,
-          entryFills: [...pos!.entryFills],
-          exitDate,
-          exitPrice,
-          exitFills: [...pos!.exitFills],
-          quantity,
-          remainingQty: 0,
-          realizedPnL,
-          unrealizedPnL: 0,
-          totalPnL: realizedPnL,
-          pnlPercent,
-          commission: commissionTotal,
-          riskUsed: riskDollarsAtEntry,
-          riskPercent: riskPctAtEntry * 100,
-          stopPrice: exitStop,
-          outcome,
-          marketDate: fill.marketDate,
-          durationMinutes: durationMinutes(entryDate, exitDate),
-          // Extended fields
-          riskPctAtEntry,
-          equityAtEntry,
-          riskDollarsAtEntry,
-          ...stopInfo,
-        };
-        
-        trades.push(trade);
-        
-        // Record risk timeline entry
-        const stateBefore = { ...riskState };
-        // outcome is now properly typed as ClosedTradeOutcome due to function overload
-        riskState = applyRiskTransition(riskState, outcome, realizedPnL);
-        
-        riskTimeline.push({
-          tradeId: trade.id,
-          tradeOutcome: outcome,
-          tradePnL: realizedPnL,
-          modeBefore: stateBefore.mode,
-          modeAfter: riskState.mode,
-          lowWinsProgressBefore: stateBefore.lowWinsProgress,
-          lowWinsProgressAfter: riskState.lowWinsProgress,
-          equityBefore: stateBefore.equity,
-          equityAfter: riskState.equity,
-          riskPctApplied: riskPctAtEntry,
-          timestamp: exitDate,
-        });
-        
-        // Handle position flip
-        if (flippingQty > 0) {
-          // Start new position in opposite direction
-          const newSide: 'LONG' | 'SHORT' = fillSide === 'BUY' ? 'LONG' : 'SHORT';
-          const flipCommissionRatio = fill.quantity > 0 ? flippingQty / fill.quantity : 0;
-          const flipFill: Fill = {
-            ...fill,
-            id: `${fill.id}-flip`,
-            quantity: flippingQty,
-            commission: fill.commission * flipCommissionRatio,
-          };
-          positions.set(symbol, {
-            symbol,
-            side: newSide,
-            quantity: flippingQty,
-            avgEntryPrice: fillPrice,
-            entryFills: [flipFill],
-            exitFills: [],
-            firstEntryTime: fill.filledTime,
-            totalCommission: flipFill.commission,
-          });
-        } else {
-          // Clear position
-          positions.delete(symbol);
-        }
-      } else {
-        // Partial close - update remaining quantity
-        pos!.quantity = remainingQty;
       }
     }
-  }
-  
-  // CREATE ACTIVE TRADES for remaining positions
-  for (const [symbol, pos] of positions) {
-    if (pos.quantity > 0.001) {
-      const entryPrice = pos.avgEntryPrice;
-      const entryDate = pos.firstEntryTime;
-      const quantity = pos.quantity;
-      
-      // Risk at entry
-      const riskPctAtEntry = riskState.mode === 'HIGH' ? 0.03 : 0.001;
-      const equityAtEntry = riskState.equity;
-      const riskDollarsAtEntry = equityAtEntry * riskPctAtEntry;
-      
-      // Find pending stop for active trades
-      const stopInfo = findInferredStop(symbol, pos.side, entryPrice, entryDate, pendingOrders);
-      
-      const trade: TradeWithRisk = {
-        id: generateTradeId(symbol, entryDate, tradeIndex++),
-        symbol,
-        side: pos.side,
-        status: 'ACTIVE',
-        entryDate,
-        entryPrice,
-        entryFills: [...pos.entryFills],
-        exitDate: null,
-        exitPrice: null,
-        exitFills: [...pos.exitFills],
-        quantity,
-        remainingQty: quantity,
-        realizedPnL: 0,
-        unrealizedPnL: 0,
-        totalPnL: 0,
-        pnlPercent: 0,
-        commission: pos.totalCommission,
-        riskUsed: riskDollarsAtEntry,
-        riskPercent: riskPctAtEntry * 100,
-        stopPrice: stopInfo.inferredStop,
-        outcome: 'ACTIVE',
-        marketDate: pos.entryFills[0]?.marketDate || toETDateKey(entryDate),
-        durationMinutes: null,
-        // Extended fields
-        riskPctAtEntry,
-        equityAtEntry,
-        riskDollarsAtEntry,
-        ...stopInfo,
+
+    if (event.type === 'sell' && event.fill) {
+      const fill = event.fill;
+      const candidates = (openBySymbol.get(fill.symbol) ?? []).filter((unit) => unit.remainingQty > 0);
+      if (candidates.length === 0) continue;
+
+      const fillPlacedTime = fill.placedTime ?? fill.filledTime;
+      const matchingStop = candidates.find((unit) =>
+        unit.protectiveStopOrders.some((stop) => {
+          const stopTime = getPlacedTime(stop);
+          if (!stopTime || !fillPlacedTime) return false;
+          return ordersWithinWindow(stopTime, fillPlacedTime);
+        })
+      );
+
+      let target: TradeUnit | null = null;
+      if (matchingStop) {
+        target = matchingStop;
+      } else {
+        const fillTotalQty = fill.totalQuantity ?? fill.quantity;
+        const qtyMatches = candidates.filter(
+          (unit) => unit.activeStop && orderQuantity(unit.activeStop) === fillTotalQty
+        );
+        if (qtyMatches.length === 1) {
+          target = qtyMatches[0];
+        } else {
+          target = candidates.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime())[0];
+        }
+      }
+
+      if (!target) continue;
+
+      const allocatedQty = Math.min(target.remainingQty, fill.quantity);
+      const allocatedFill: Fill = {
+        ...fill,
+        id: `${fill.id}-alloc-${target.key}`,
+        quantity: allocatedQty,
       };
-      
-      trades.push(trade);
+      target.exitFills.push(allocatedFill);
+      target.remainingQty = Math.max(0, target.remainingQty - allocatedQty);
     }
   }
-  
-  // Sort trades: ACTIVE first, then by entryDate descending
-  trades.sort((a, b) => {
-    // ACTIVE trades first
+
+  const trades: TradeWithRisk[] = [];
+  let tradeIndex = 0;
+
+  for (const unit of tradeUnits) {
+    const entryPrice = weightedAvgPrice(unit.entryFills);
+    const entryQty = unit.entryFills.reduce((sum, fill) => sum + fill.quantity, 0);
+    const exitPrice = weightedAvgPrice(unit.exitFills);
+    const commissionTotal = totalCommission(unit.entryFills) + totalCommission(unit.exitFills);
+
+    const realizedPnL =
+      unit.exitFills.reduce((sum, fill) => sum + fill.quantity * fill.price, 0) -
+      unit.entryFills.reduce((sum, fill) => sum + fill.quantity * fill.price, 0) -
+      commissionTotal;
+
+    const isClosed = unit.remainingQty <= 0;
+    const exitDate = isClosed ? unit.exitFills[unit.exitFills.length - 1]?.filledTime ?? null : null;
+    const exitDayKey = exitDate ? toETDateKey(exitDate) : null;
+    const marketDate = exitDayKey ?? unit.entryDayKey;
+    const pnlPercent = entryPrice > 0 ? (realizedPnL / (entryPrice * entryQty)) * 100 : 0;
+
+    const outcome = determineOutcome(realizedPnL, !isClosed);
+
+    const stopPrice = unit.activeStop?.stopPrice ?? unit.activeStop?.price ?? null;
+    const stopSource: 'user' | 'none' = stopPrice ? 'user' : 'none';
+
+    const trade: TradeWithRisk = {
+      id: generateTradeId(unit.symbol, unit.entryTime, tradeIndex++),
+      symbol: unit.symbol,
+      side: 'LONG',
+      status: isClosed ? 'CLOSED' : 'ACTIVE',
+      entryDate: unit.entryTime,
+      entryDayKey: unit.entryDayKey,
+      entryPrice,
+      entryFills: [...unit.entryFills],
+      exitDate,
+      exitDayKey,
+      exitPrice: isClosed ? exitPrice : null,
+      exitFills: [...unit.exitFills],
+      quantity: entryQty,
+      remainingQty: Math.max(0, unit.remainingQty),
+      realizedPnL: isClosed ? realizedPnL : 0,
+      unrealizedPnL: 0,
+      totalPnL: isClosed ? realizedPnL : 0,
+      pnlPercent: isClosed ? pnlPercent : 0,
+      commission: commissionTotal,
+      riskUsed: 0,
+      riskPercent: 0,
+      stopPrice,
+      modeAtEntry: 'HIGH',
+      riskPctAtEntry: 0,
+      equityAtEntry: startingEquity,
+      riskDollarsAtEntry: 0,
+      outcome,
+      marketDate,
+      durationMinutes: exitDate ? durationMinutes(unit.entryTime, exitDate) : null,
+      inferredStop: stopPrice,
+      pendingExit: null,
+      stopSource,
+    };
+
+    trades.push(trade);
+  }
+
+  const { assignments } = applyDailyDirectives(trades, startingEquity);
+  const enrichedTrades = trades.map((trade) => {
+    const assignment = assignments.get(trade.id);
+    if (!assignment) return trade;
+    return {
+      ...trade,
+      modeAtEntry: assignment.modeAtEntry,
+      riskPctAtEntry: assignment.riskPctAtEntry,
+      equityAtEntry: assignment.equityAtEntry,
+      riskDollarsAtEntry: assignment.riskDollarsAtEntry,
+      riskUsed: assignment.riskDollarsAtEntry,
+      riskPercent: assignment.riskPctAtEntry * 100,
+    };
+  });
+
+  const riskTimeline: RiskStateSnapshot[] = [];
+
+  enrichedTrades.sort((a, b) => {
     if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
     if (a.status !== 'ACTIVE' && b.status === 'ACTIVE') return 1;
-    // Then by entry time descending (most recent first)
     return b.entryDate.getTime() - a.entryDate.getTime();
   });
-  
-  return { trades, riskTimeline };
+
+  return { trades: enrichedTrades, riskTimeline };
 }
 
 /**
@@ -476,19 +484,19 @@ export function calculateMetrics(trades: Trade[]) {
     console.warn('calculateMetrics received non-array:', typeof trades);
     trades = [];
   }
-  const closedTrades = trades.filter(t => t.status === 'CLOSED');
-  const wins = closedTrades.filter(t => t.outcome === 'WIN');
-  const losses = closedTrades.filter(t => t.outcome === 'LOSS');
-  const breakeven = closedTrades.filter(t => t.outcome === 'BREAKEVEN');
-  
+  const closedTrades = trades.filter((t) => t.status === 'CLOSED');
+  const wins = closedTrades.filter((t) => t.outcome === 'WIN');
+  const losses = closedTrades.filter((t) => t.outcome === 'LOSS');
+  const breakeven = closedTrades.filter((t) => t.outcome === 'BREAKEVEN');
+
   const totalPnL = closedTrades.reduce((sum, t) => sum + t.realizedPnL, 0);
   const grossWins = wins.reduce((sum, t) => sum + t.realizedPnL, 0);
   const grossLosses = Math.abs(losses.reduce((sum, t) => sum + t.realizedPnL, 0));
-  
+
   const avgWin = wins.length > 0 ? grossWins / wins.length : 0;
   const avgLoss = losses.length > 0 ? grossLosses / losses.length : 0;
   const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? Infinity : 0;
-  
+
   // Calculate streaks (by entry time order)
   let currentStreak = 0;
   let streakType: 'WIN' | 'LOSS' | 'NONE' = 'NONE';
@@ -496,12 +504,10 @@ export function calculateMetrics(trades: Trade[]) {
   let maxConsecutiveLosses = 0;
   let tempWinStreak = 0;
   let tempLossStreak = 0;
-  
+
   // Process in entry time order
-  const chronological = [...closedTrades].sort((a, b) => 
-    a.entryDate.getTime() - b.entryDate.getTime()
-  );
-  
+  const chronological = [...closedTrades].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
+
   for (const trade of chronological) {
     if (trade.outcome === 'WIN') {
       tempWinStreak++;
@@ -513,30 +519,36 @@ export function calculateMetrics(trades: Trade[]) {
       maxConsecutiveLosses = Math.max(maxConsecutiveLosses, tempLossStreak);
     }
   }
-  
+
   // Current streak from most recent trade
   if (chronological.length > 0) {
     const lastTrade = chronological[chronological.length - 1];
     if (lastTrade.outcome === 'WIN') {
       streakType = 'WIN';
-      currentStreak = tempWinStreak;
     } else if (lastTrade.outcome === 'LOSS') {
       streakType = 'LOSS';
-      currentStreak = tempLossStreak;
+    }
+
+    if (streakType !== 'NONE') {
+      for (let i = chronological.length - 1; i >= 0; i--) {
+        const t = chronological[i];
+        if (t.outcome === streakType) currentStreak++;
+        else break;
+      }
     }
   }
-  
+
   return {
     totalTrades: closedTrades.length,
     wins: wins.length,
     losses: losses.length,
     breakeven: breakeven.length,
-    winRate: closedTrades.length > 0 ? wins.length / closedTrades.length : 0,
+    winRate: closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0,
     totalPnL,
     avgWin,
     avgLoss,
-    profitFactor: profitFactor === Infinity ? 999 : profitFactor,
-    maxDrawdownPct: 0, // Calculated separately
+    profitFactor,
+    maxDrawdownPct: 0,
     currentStreak,
     streakType,
     maxConsecutiveWins,

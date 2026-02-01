@@ -1,129 +1,134 @@
 import { describe, expect, test } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import type { Trade } from "../engine/types";
-import { computeRiskState, STRATEGY, getCurrentRisk } from "../engine/riskEngine";
-import { parseWebullCSV } from "../engine/webullParser";
-import { buildTrades } from "../engine/tradesBuilder";
+import { applyDailyDirectives, getCurrentRisk, STRATEGY } from "../engine/riskEngine";
 import { toETDateKey } from "../lib/dateKey";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixture = (name: string) =>
-  readFileSync(resolve(__dirname, "../../testdata", name), "utf8");
+const makeDate = (day: string, time: string) => new Date(`${day}T${time}Z`);
 
-// Helper to create a test trade that matches the Trade interface
-function makeTrade(pnl: number, exitTs: Date): Trade {
-  const entryTs = new Date(exitTs.getTime() - 60_000);
-  const entryPrice = 100;
-  const qty = 1;
-  const exitPrice = entryPrice + pnl;
-
-  // Determine outcome from P&L
-  const outcome = pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BREAKEVEN';
+function makeTrade(
+  id: string,
+  entryDay: string,
+  exitDay: string | null,
+  realizedPnL: number,
+  modeAtEntry: "HIGH" | "LOW" = "HIGH"
+): Trade {
+  const entryDate = makeDate(entryDay, "14:30:00");
+  const exitDate = exitDay ? makeDate(exitDay, "15:30:00") : null;
+  const status = exitDate ? "CLOSED" : "ACTIVE";
+  const outcome = status === "CLOSED" ? (realizedPnL >= 0 ? "WIN" : "LOSS") : "ACTIVE";
 
   return {
-    id: `T|${exitTs.toISOString()}|${pnl}`,
+    id,
     symbol: "AAPL",
     side: "LONG",
-    status: "CLOSED",
-    entryDate: entryTs,
-    entryPrice,
+    status,
+    entryDate,
+    entryDayKey: toETDateKey(entryDate),
+    entryPrice: 100,
     entryFills: [],
-    exitDate: exitTs,
-    exitPrice,
+    exitDate,
+    exitDayKey: exitDate ? toETDateKey(exitDate) : null,
+    exitPrice: exitDate ? 101 : null,
     exitFills: [],
-    quantity: qty,
-    remainingQty: 0,
-    realizedPnL: pnl,
+    quantity: 1,
+    remainingQty: status === "CLOSED" ? 0 : 1,
+    realizedPnL: status === "CLOSED" ? realizedPnL : 0,
     unrealizedPnL: 0,
-    totalPnL: pnl,
-    pnlPercent: entryPrice > 0 ? (pnl / entryPrice) * 100 : 0,
+    totalPnL: status === "CLOSED" ? realizedPnL : 0,
+    pnlPercent: 0,
     commission: 0,
     riskUsed: 0,
     riskPercent: 0,
     stopPrice: null,
+    modeAtEntry,
+    riskPctAtEntry: STRATEGY.highModeRiskPct,
+    equityAtEntry: 10000,
+    riskDollarsAtEntry: 10000 * STRATEGY.highModeRiskPct,
     outcome,
-    marketDate: toETDateKey(exitTs),
-    durationMinutes: 1,
+    marketDate: exitDay ?? entryDay,
+    durationMinutes: exitDate ? 60 : null,
   };
 }
 
-describe("Restart throttle state machine (per-trade)", () => {
-  test("no trades -> starts HIGH", () => {
-    const r = computeRiskState([], 20000, STRATEGY);
-    expect(r.mode).toBe("HIGH");
-    expect(r.lowWinsProgress).toBe(0);
-    expect(r.todayRiskPct).toBe(STRATEGY.highModeRiskPct);
-  });
-
-  test("loss in HIGH -> LOW (immediate next trade)", () => {
-    const trades = [makeTrade(-1, new Date("2026-01-02T18:00:00Z"))];
-    const r = computeRiskState(trades, 20000, STRATEGY);
-
-    expect(r.mode).toBe("LOW");
-    expect(r.lowWinsProgress).toBe(0);
-    expect(r.todayRiskPct).toBe(STRATEGY.lowModeRiskPct);
-  });
-
-  test("LOW: 2 wins -> HIGH; breakeven ignored", () => {
+describe("Restart throttle state machine (daily lock)", () => {
+  test("realizedPnL == 0 counts as WIN", () => {
     const trades = [
-      makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
-      makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // LOW progress 1
-      makeTrade(0, new Date("2026-01-02T18:20:00Z")), // ignored (breakeven)
-      makeTrade(+1, new Date("2026-01-02T18:30:00Z")), // progress 2 -> HIGH
+      makeTrade("L1", "2026-01-02", "2026-01-02", -100),
+      makeTrade("Z1", "2026-01-03", "2026-01-03", 0),
     ];
 
-    const r = computeRiskState(trades, 20000, STRATEGY);
-    expect(r.mode).toBe("HIGH");
-    expect(r.lowWinsProgress).toBe(0);
-    expect(r.todayRiskPct).toBe(STRATEGY.highModeRiskPct);
+    const { directives } = applyDailyDirectives(trades, 10000, STRATEGY);
+    const day4 = directives.find((directive) => directive.date === "2026-01-04");
+
+    expect(day4?.mode).toBe("LOW");
+    expect(day4?.lowWinsProgress).toBe(1);
   });
 
-  test("LOW: loss resets progress to 0", () => {
+  test("auto daily lock keeps same-day entries on same directive", () => {
     const trades = [
-      makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
-      makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // progress 1
-      makeTrade(-1, new Date("2026-01-02T18:20:00Z")), // reset to 0, stay LOW
+      makeTrade("A1", "2026-01-02", "2026-01-02", -50),
+      makeTrade("A2", "2026-01-02", "2026-01-02", 25),
     ];
 
-    const r = computeRiskState(trades, 20000, STRATEGY);
-    expect(r.mode).toBe("LOW");
-    expect(r.lowWinsProgress).toBe(0);
-    expect(r.todayRiskPct).toBe(STRATEGY.lowModeRiskPct);
+    const { assignments, directives } = applyDailyDirectives(trades, 10000, STRATEGY);
+    const tradeA1 = assignments.get("A1");
+    const tradeA2 = assignments.get("A2");
+    const day3 = directives.find((directive) => directive.date === "2026-01-03");
+
+    expect(tradeA1?.riskPctAtEntry).toBe(STRATEGY.highModeRiskPct);
+    expect(tradeA2?.riskPctAtEntry).toBe(STRATEGY.highModeRiskPct);
+    expect(day3?.mode).toBe("LOW");
   });
 
-  test("forecast: LOW with 1 win -> next WIN returns HIGH", () => {
+  test("equity availability ignores same-day exits", () => {
     const trades = [
-      makeTrade(-1, new Date("2026-01-02T18:00:00Z")), // HIGH -> LOW
-      makeTrade(+1, new Date("2026-01-02T18:10:00Z")), // LOW progress 1
+      makeTrade("B1", "2026-01-02", "2026-01-02", 1000),
+      makeTrade("B2", "2026-01-02", "2026-01-02", 200),
+      makeTrade("B3", "2026-01-03", "2026-01-03", 100),
     ];
 
-    const r = computeRiskState(trades, 20000, STRATEGY);
-    expect(r.mode).toBe("LOW");
-    expect(r.lowWinsProgress).toBe(1);
-    expect(r.tomorrowIfWinRiskPct).toBe(STRATEGY.highModeRiskPct);
-    expect(r.tomorrowIfLossRiskPct).toBe(STRATEGY.lowModeRiskPct);
+    const { assignments } = applyDailyDirectives(trades, 10000, STRATEGY);
+
+    expect(assignments.get("B1")?.equityAtEntry).toBe(10000);
+    expect(assignments.get("B2")?.equityAtEntry).toBe(10000);
+    expect(assignments.get("B3")?.equityAtEntry).toBe(11200);
   });
 
-  test("demo CSV ends in HIGH mode", () => {
-    const csv = fixture("demo_high_mode.csv");
-    const parsed = parseWebullCSV(csv);
-    const { trades } = buildTrades(parsed.fills);
+  test("wins only count toward restore when entered in LOW", () => {
+    const trades = [
+      makeTrade("C1", "2026-01-02", "2026-01-02", -100),
+      makeTrade("C2", "2026-01-02", "2026-01-03", 50, "HIGH"),
+      makeTrade("C3", "2026-01-03", "2026-01-03", 50, "LOW"),
+    ];
 
-    const risk = getCurrentRisk(trades, 25000, STRATEGY);
+    const { directives } = applyDailyDirectives(trades, 10000, STRATEGY);
+    const day4 = directives.find((directive) => directive.date === "2026-01-04");
 
-    expect(risk.mode).toBe("HIGH");
+    expect(day4?.mode).toBe("LOW");
+    expect(day4?.lowWinsProgress).toBe(1);
   });
 
-  test("demo CSV ends in LOW mode", () => {
-    const csv = fixture("demo_low_mode.csv");
-    const parsed = parseWebullCSV(csv);
-    const { trades } = buildTrades(parsed.fills);
+  test("two LOW-entered wins restore HIGH next day", () => {
+    const trades = [
+      makeTrade("R1", "2026-01-02", "2026-01-02", -100),
+      makeTrade("R2", "2026-01-03", "2026-01-03", 20, "LOW"),
+      makeTrade("R3", "2026-01-03", "2026-01-03", 30, "LOW"),
+    ];
 
-    const risk = getCurrentRisk(trades, 25000, STRATEGY);
+    const { directives } = applyDailyDirectives(trades, 10000, STRATEGY);
+    const day4 = directives.find((directive) => directive.date === "2026-01-04");
 
-    expect(risk.mode).toBe("LOW");
+    expect(day4?.mode).toBe("HIGH");
+    expect(day4?.lowWinsProgress).toBe(0);
+  });
+
+  test("current risk reflects today directive", () => {
+    const today = toETDateKey(new Date());
+    const trades = [makeTrade("D1", today, today, -20)];
+    const current = getCurrentRisk(trades, 10000, STRATEGY);
+
+    expect(current.mode).toBe("HIGH");
+    expect(current.riskPct).toBe(STRATEGY.highModeRiskPct);
   });
 });
