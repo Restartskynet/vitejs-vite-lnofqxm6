@@ -1,4 +1,5 @@
 import type { Trade, RiskState, StrategyConfig, DailyEquity, ClosedTradeOutcome } from './types';
+import { toETDateKey } from '../lib/dateKey';
 
 export const DEFAULT_STRATEGY: StrategyConfig = {
   id: 'restart-throttle',
@@ -54,7 +55,7 @@ export function calculateRiskStates(
   
   if (sortedTrades.length === 0) {
     // No trades - return initial HIGH mode state
-    const today = new Date().toISOString().split('T')[0];
+    const today = toETDateKey(new Date());
     return [{
       date: today,
       mode: 'HIGH',
@@ -164,7 +165,7 @@ export function getCurrentRisk(
   
   const states = calculateRiskStates(tradesArray, startingEquity, strategy);
   const lastState = states[states.length - 1] || {
-    date: new Date().toISOString().split('T')[0],
+    date: toETDateKey(new Date()),
     mode: 'HIGH' as RiskMode,
     riskPct: strategy.highModeRiskPct,
     allowedRiskDollars: startingEquity * strategy.highModeRiskPct,

@@ -1,9 +1,13 @@
 export type TimeframePreset = '1W' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
 
+import { epochDayToIso, isoToEpochDay, normalizeDateKey } from './dateKey';
+
 export function parseDateInput(value: string): Date | null {
   if (!value) return null;
-  const parsed = new Date(`${value}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const normalized = normalizeDateKey(value);
+  if (!normalized) return null;
+  const epochDay = isoToEpochDay(normalized);
+  return new Date(`${epochDayToIso(epochDay)}T00:00:00Z`);
 }
 
 export function isValidRange(start: Date | null, end: Date | null): boolean {

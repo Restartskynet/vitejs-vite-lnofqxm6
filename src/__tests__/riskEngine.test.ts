@@ -7,6 +7,7 @@ import type { Trade } from "../engine/types";
 import { computeRiskState, STRATEGY, getCurrentRisk } from "../engine/riskEngine";
 import { parseWebullCSV } from "../engine/webullParser";
 import { buildTrades } from "../engine/tradesBuilder";
+import { toETDateKey } from "../lib/dateKey";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) =>
@@ -44,7 +45,7 @@ function makeTrade(pnl: number, exitTs: Date): Trade {
     riskPercent: 0,
     stopPrice: null,
     outcome,
-    marketDate: exitTs.toISOString().split('T')[0],
+    marketDate: toETDateKey(exitTs),
     durationMinutes: 1,
   };
 }

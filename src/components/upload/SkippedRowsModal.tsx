@@ -1,5 +1,6 @@
 import { Modal } from '../ui/Modal';
 import { Button, Badge } from '../ui';
+import { toETDateKey } from '../../lib/dateKey';
 
 interface SkippedRow {
   rowNumber: number;
@@ -38,7 +39,7 @@ export function SkippedRowsModal({ isOpen, onClose, skippedRows }: SkippedRowsMo
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `skipped-rows-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `skipped-rows-${toETDateKey(new Date())}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -60,7 +61,7 @@ export function SkippedRowsModal({ isOpen, onClose, skippedRows }: SkippedRowsMo
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `skipped-rows-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `skipped-rows-${toETDateKey(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

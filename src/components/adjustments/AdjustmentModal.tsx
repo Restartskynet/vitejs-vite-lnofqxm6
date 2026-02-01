@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button, Input } from '../ui';
 import { cn } from '../../lib/utils';
+import { toETDateKey } from '../../lib/dateKey';
 
 interface Adjustment {
   id: string;
@@ -37,7 +38,7 @@ export function AdjustmentModal({ isOpen, onClose, onSave, adjustment }: Adjustm
         setNote(adjustment.note);
         setIsCredit(adjustment.amount >= 0);
       } else {
-        setDate(new Date().toISOString().split('T')[0]);
+        setDate(toETDateKey(new Date()));
         setType('Deposit');
         setAmount('');
         setNote('');

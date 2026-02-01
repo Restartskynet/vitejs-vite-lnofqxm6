@@ -3,6 +3,7 @@ import type { ImportResultExtended } from '../../engine/types';
 import { buildTrades } from '../../engine/tradesBuilder';
 import { Card, Badge, Button } from '../ui';
 import { formatDate, formatDateTime } from '../../lib/utils';
+import { toETDateKey } from '../../lib/dateKey';
 
 interface ImportSummaryProps {
   result: ImportResultExtended;
@@ -176,7 +177,7 @@ export function ImportSummary({ result, onConfirm, onCancel, isProcessing, class
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `import-report-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `import-report-${toETDateKey(new Date())}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };

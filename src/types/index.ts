@@ -95,6 +95,7 @@ export type Page = 'dashboard' | 'upload' | 'trades' | 'settings';
 // ============================================================================
 
 import type { StrategyConfig } from '../engine/types';
+import { toETDateKey } from '../lib/dateKey';
 
 export const DEFAULT_STRATEGY: StrategyConfig = {
   id: 'restart-throttle',
@@ -107,7 +108,7 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
 
 export const DEFAULT_SETTINGS: Settings = {
   startingEquity: 25000,
-  startingDate: new Date().toISOString().split('T')[0],
+  startingDate: toETDateKey(new Date()),
   strategyId: 'restart-throttle',
   theme: 'dark',
 };
@@ -130,7 +131,7 @@ export const EMPTY_METRICS: Metrics = {
 };
 
 export const EMPTY_CURRENT_RISK: CurrentRisk = {
-  asOfDate: new Date().toISOString().split('T')[0],
+  asOfDate: toETDateKey(new Date()),
   mode: 'HIGH',
   todayRiskPct: 0.03,
   allowedRiskDollars: 0,
