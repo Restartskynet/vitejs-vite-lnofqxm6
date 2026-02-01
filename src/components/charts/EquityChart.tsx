@@ -81,21 +81,23 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const [customError, setCustomError] = useState<string | null>(null);
   const [appliedCustomRange, setAppliedCustomRange] = useState<AppliedRange | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredPosition, setHoveredPosition] = useState<{ x: number; y: number } | null>(null);
+  const [chartBounds, setChartBounds] = useState<{ width: number; height: number } | null>(null);
+  const [rangeToast, setRangeToast] = useState<string | null>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
 
-  const { normalizedData, invalidKeyCount } = useMemo(() => {
-    if (!Array.isArray(data)) return { normalizedData: [] as NormalizedEquityPoint[], invalidKeyCount: 0 };
-    let invalidCount = 0;
+  const normalizedData = useMemo(() => {
+    if (!Array.isArray(data)) return [] as NormalizedEquityPoint[];
     const cleaned: NormalizedEquityPoint[] = [];
     data.forEach((point) => {
       if (!point || typeof point.accountEquity !== 'number') return;
       const dateKey = normalizeDateKey(point.date);
       if (!dateKey) {
-        invalidCount += 1;
         return;
       }
       cleaned.push({ ...point, dateKey, epochDay: isoToEpochDay(dateKey) });
     });
-    return { normalizedData: cleaned, invalidKeyCount: invalidCount };
+    return cleaned;
   }, [data]);
 
   const sortedData = useMemo(() => {
@@ -174,20 +176,17 @@ export function EquityChart({ data, className }: EquityChartProps) {
     return { values, drawdowns, minVal, maxVal };
   }, [filteredData]);
 
-  const rangeSummary = useMemo(() => {
+  const appliedRangeLabel = useMemo(() => {
     if (!activeRange) return null;
-    const applied = `${activeRange.startKey} → ${activeRange.endKey}`;
-    const days = `${activeRange.daysShown} days shown`;
-    const note =
-      timeframe === 'CUSTOM'
-        ? activeRange.clamped
-          ? 'Clamped to available data.'
-          : null
-        : activeRange.clamped && activeRange.desiredDays
-          ? `${timeframe} requested · only ${activeRange.daysShown}d available`
-          : null;
-    return { applied, days, note };
-  }, [activeRange, timeframe]);
+    if (timeframe === 'CUSTOM') {
+      if (!appliedCustomRange) return null;
+      return `Range: ${activeRange.startKey} → ${activeRange.endKey}`;
+    }
+    if (activeRange.clamped) {
+      return `Range: ${activeRange.startKey} → ${activeRange.endKey}`;
+    }
+    return null;
+  }, [activeRange, appliedCustomRange, timeframe]);
 
   const headerStats = useMemo(() => {
     if (filteredData.length === 0) return null;
@@ -254,14 +253,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const hoveredData = hoveredIndex !== null ? filteredData[hoveredIndex] : null;
   const previousData = hoveredIndex !== null && hoveredIndex > 0 ? filteredData[hoveredIndex - 1] : null;
   const hasRangeData = Boolean(chartData) && filteredData.length > 0;
-  const hoveredDrawdown = hoveredIndex !== null && chartData ? chartData.drawdowns[hoveredIndex] : null;
   const equityDelta = hoveredData && previousData ? hoveredData.accountEquity - previousData.accountEquity : null;
-  const tradingDelta = hoveredData && previousData ? hoveredData.tradingEquity - previousData.tradingEquity : null;
-  const adjustmentDelta =
-    hoveredData && previousData
-      ? (hoveredData.accountEquity - hoveredData.tradingEquity) -
-        (previousData.accountEquity - previousData.tradingEquity)
-      : null;
 
   const lineColor = showDrawdown ? 'rgb(var(--accent-danger))' : 'rgb(var(--accent-low))';
   const areaId = showDrawdown ? 'drawdown-line' : 'equity-line';
@@ -275,18 +267,58 @@ export function EquityChart({ data, className }: EquityChartProps) {
     { label: 'YTD', value: 'YTD' },
     { label: '1Y', value: '1Y' },
     { label: 'ALL', value: 'ALL' },
-    { label: 'Custom', value: 'CUSTOM' },
+    { label: 'CUSTOM', value: 'CUSTOM' },
   ];
 
-  const presetLabel = (preset: TimeframePreset) => {
-    if (!dataRange || preset === 'ALL') return preset;
+  const historyDays = dataRange?.totalDays ?? 0;
+  const historyLabel = historyDays === 1 ? '1 day of history' : `${historyDays} days of history`;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(hover: none) and (pointer: coarse)');
+    const update = () => setIsTouchDevice(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (!rangeToast) return;
+    const id = window.setTimeout(() => setRangeToast(null), 2600);
+    return () => window.clearTimeout(id);
+  }, [rangeToast]);
+
+  const getPresetDisabledReason = (preset: TimeframePreset) => {
+    if (!dataRange || preset === 'ALL') return null;
     const rawStart = getPresetStartEpoch(preset, dataRange.endEpoch);
     const desiredDays = dataRange.endEpoch - rawStart + 1;
     if (dataRange.totalDays < desiredDays) {
-      return `${preset} (only ${dataRange.totalDays}d)`;
+      return `Need ${preset} history. You have ${dataRange.totalDays} days.`;
     }
-    return preset;
+    return null;
   };
+
+  const tooltipMetrics = useMemo(() => {
+    if (!hoveredPoint || !hoveredPosition || !chartBounds) return null;
+    const tooltipWidth = 180;
+    const tooltipHeight = 96;
+    const padding = 8;
+    const offset = 12;
+    const anchorLeft = hoveredPosition.x / chartBounds.width > 0.6;
+    const rawLeft = anchorLeft
+      ? hoveredPosition.x - tooltipWidth - offset
+      : hoveredPosition.x + offset;
+    const rawTop = hoveredPosition.y - 24;
+    const left = Math.min(
+      Math.max(rawLeft, padding),
+      chartBounds.width - tooltipWidth - padding
+    );
+    const top = Math.min(
+      Math.max(rawTop, padding),
+      chartBounds.height - tooltipHeight - padding
+    );
+    return { left, top, width: tooltipWidth };
+  }, [chartBounds, hoveredPoint, hoveredPosition]);
 
   return (
     <Card className={className}>
@@ -295,7 +327,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
           <h3 className="text-lg font-semibold text-white">Account equity</h3>
           <p className="text-xs text-ink-muted">
             {showDrawdown ? 'Drawdown from peak' : 'End-of-day account equity'}
-            {rangeSummary ? ` · ${rangeSummary.days}` : ''}
+            {dataRange ? ` · ${historyLabel}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -358,28 +390,42 @@ export function EquityChart({ data, className }: EquityChartProps) {
 
       <div className="mb-4">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-2 px-2">
-          {timeframes.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setTimeframe(option.value)}
-              aria-pressed={timeframe === option.value}
-              className={cn(
-                'shrink-0 px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-wider transition-all border',
-                timeframe === option.value
-                  ? 'bg-[rgb(var(--accent-low)/0.22)] text-[rgb(var(--accent-low))] border-[rgb(var(--accent-low)/0.6)] shadow-[0_0_18px_rgb(var(--accent-glow)/0.35)]'
-                  : 'bg-white/5 text-ink-muted border-white/10 hover:border-white/20'
-              )}
-            >
-              {option.value === 'CUSTOM' ? option.label : presetLabel(option.value)}
-            </button>
-          ))}
+          {timeframes.map((option) => {
+            const disabledReason =
+              option.value === 'CUSTOM' ? null : getPresetDisabledReason(option.value);
+            const isDisabled = Boolean(disabledReason);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  if (isDisabled) {
+                    if (isTouchDevice && disabledReason) {
+                      setRangeToast(disabledReason);
+                    }
+                    return;
+                  }
+                  setTimeframe(option.value);
+                }}
+                aria-pressed={timeframe === option.value}
+                aria-disabled={isDisabled}
+                title={!isTouchDevice && isDisabled ? disabledReason ?? undefined : undefined}
+                className={cn(
+                  'shrink-0 px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-wider transition-all border',
+                  timeframe === option.value
+                    ? 'bg-[rgb(var(--accent-low)/0.22)] text-[rgb(var(--accent-low))] border-[rgb(var(--accent-low)/0.6)] shadow-[0_0_18px_rgb(var(--accent-glow)/0.35)]'
+                    : 'bg-white/5 text-ink-muted border-white/10 hover:border-white/20',
+                  isDisabled && 'opacity-40 cursor-not-allowed hover:border-white/10'
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
-        {rangeSummary && (
-          <div className="mt-2 text-[11px] text-ink-muted space-y-1">
-            <div>Applied: {rangeSummary.applied}</div>
-            <div>{rangeSummary.days}</div>
-            {rangeSummary.note && <div className="text-amber-200">{rangeSummary.note}</div>}
+        {appliedRangeLabel && (
+          <div className="mt-2 text-[11px] text-ink-muted">
+            {appliedRangeLabel}
           </div>
         )}
       </div>
@@ -479,17 +525,16 @@ export function EquityChart({ data, className }: EquityChartProps) {
               Reset to full range
             </button>
           </div>
-          {appliedCustomRange && (
-            <div className="mt-3 text-[11px] text-ink-muted space-y-1">
-              <div>Applied: {appliedCustomRange.startKey} → {appliedCustomRange.endKey}</div>
-              <div>{appliedCustomRange.daysShown} days shown</div>
-              {appliedCustomRange.clamped && <div className="text-amber-200">Clamped to available data.</div>}
-            </div>
-          )}
         </div>
       )}
 
-      <div className="relative" onMouseLeave={() => setHoveredIndex(null)}>
+      <div
+        className="relative"
+        onMouseLeave={() => {
+          setHoveredIndex(null);
+          setHoveredPosition(null);
+        }}
+      >
         {hasRangeData ? (
           <>
             <svg
@@ -498,8 +543,15 @@ export function EquityChart({ data, className }: EquityChartProps) {
               preserveAspectRatio="xMinYMin meet"
               onMouseMove={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
-                const x = (event.clientX - rect.left) / rect.width;
-                const idx = Math.round(x * (pointCount - 1));
+                const relativeX = (event.clientX - rect.left) / rect.width;
+                const idx = Math.round(relativeX * (pointCount - 1));
+                const scaleX = rect.width / CHART_WIDTH;
+                const scaleY = rect.height / CHART_HEIGHT;
+                setChartBounds({ width: rect.width, height: rect.height });
+                setHoveredPosition({
+                  x: points[Math.max(0, Math.min(idx, pointCount - 1))].x * scaleX,
+                  y: points[Math.max(0, Math.min(idx, pointCount - 1))].y * scaleY,
+                });
                 setHoveredIndex(Math.max(0, Math.min(idx, pointCount - 1)));
               }}
             >
@@ -565,38 +617,23 @@ export function EquityChart({ data, className }: EquityChartProps) {
               })}
             </svg>
 
-            {hoveredPoint && hoveredData && (
+            {hoveredPoint && hoveredData && tooltipMetrics && (
               <div
-                className="absolute top-4 right-4 rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2 text-xs text-white shadow-lg"
-                style={{ minWidth: '160px' }}
+                className="absolute rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2 text-xs text-white shadow-lg pointer-events-none"
+                style={{ left: tooltipMetrics.left, top: tooltipMetrics.top, minWidth: tooltipMetrics.width }}
               >
                 <p className="text-ink-muted">{formatDate(hoveredData.dateKey)}</p>
-                <p className="text-sm font-semibold text-white">
-                  {showDrawdown && hoveredDrawdown !== null
-                    ? `Drawdown ${hoveredDrawdown.toFixed(2)}%`
-                    : formatMoney(hoveredData.accountEquity)}
-                </p>
-                <div className="mt-2 space-y-1 text-[11px] text-ink-muted">
-                  <div className="flex items-center justify-between gap-4">
-                    <span>Account equity</span>
-                    <span className="text-white tabular-nums">{formatMoney(hoveredData.accountEquity)}</span>
+                <div className="mt-1 space-y-1 text-[11px] text-ink-muted">
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-wide text-ink-muted">Account equity</span>
+                    <span className="text-sm font-semibold text-white tabular-nums">
+                      {formatMoney(hoveredData.accountEquity)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <span>Net change</span>
                     <span className={cn('tabular-nums', (equityDelta ?? 0) >= 0 ? 'text-emerald-300' : 'text-red-300')}>
                       {equityDelta === null ? '—' : `${equityDelta >= 0 ? '+' : ''}${formatMoney(equityDelta)}`}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span>Trades P/L delta</span>
-                    <span className={cn('tabular-nums', (tradingDelta ?? 0) >= 0 ? 'text-emerald-300' : 'text-red-300')}>
-                      {tradingDelta === null ? '—' : `${tradingDelta >= 0 ? '+' : ''}${formatMoney(tradingDelta)}`}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span>Adjustments delta</span>
-                    <span className={cn('tabular-nums', (adjustmentDelta ?? 0) >= 0 ? 'text-emerald-300' : 'text-red-300')}>
-                      {adjustmentDelta === null ? '—' : `${adjustmentDelta >= 0 ? '+' : ''}${formatMoney(adjustmentDelta)}`}
                     </span>
                   </div>
                 </div>
@@ -610,15 +647,11 @@ export function EquityChart({ data, className }: EquityChartProps) {
         )}
       </div>
 
-      {import.meta.env.DEV && (
-        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-[10px] text-ink-muted space-y-1">
-          <div>Dataset: {dataRange ? `${dataRange.startKey} → ${dataRange.endKey}` : '—'} · invalid keys: {invalidKeyCount}</div>
-          <div>Selected range: {timeframe}</div>
-          <div>
-            Applied range: {activeRange ? `${activeRange.startKey} → ${activeRange.endKey}` : '—'}
-            {activeRange?.clamped ? ' (clamped)' : ''}
+      {rangeToast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center sm:hidden">
+          <div className="rounded-full border border-white/10 bg-slate-900/90 px-4 py-2 text-xs text-white shadow-lg">
+            {rangeToast}
           </div>
-          <div>Points shown: {filteredData.length}</div>
         </div>
       )}
 
