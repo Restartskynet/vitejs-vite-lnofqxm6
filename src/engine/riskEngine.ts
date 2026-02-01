@@ -1,4 +1,4 @@
-import type { Trade, RiskState, StrategyConfig, DailyEquity, ClosedTradeOutcome } from './types';
+import type { Trade, RiskState, StrategyConfig, DailyEquity } from './types';
 import { epochDayToIso, isoToEpochDay, toETDateKey } from '../lib/dateKey';
 
 export const DEFAULT_STRATEGY: StrategyConfig = {
@@ -68,10 +68,10 @@ export function applyDailyDirectives(
   startingEquity: number,
   strategy: StrategyConfig = DEFAULT_STRATEGY,
   asOfDate?: string
-): { directives: DailyDirective[]; assignments: Map<string, RiskAssignment> } {
+): { directives: DailyDirective[]; assignments: Map<string, RiskAssignment>; modeSwitches: Map<string, boolean> } {
   const tradesArray = ensureTradesArray(trades);
   const closedTrades = tradesArray.filter((trade) => trade.status === 'CLOSED');
-  const entryDates = tradesArray.map((trade) => trade.entryDayKey);
+  const entryDates = tradesArray.map((trade) => trade.entryDayKey).filter((date): date is string => Boolean(date));
   const exitDates = closedTrades.map((trade) => trade.exitDayKey).filter((date): date is string => Boolean(date));
 
   const todayKey = asOfDate ?? toETDateKey(new Date());
@@ -103,6 +103,7 @@ export function applyDailyDirectives(
   let equityAvailable = startingEquity;
 
   const assignments = new Map<string, RiskAssignment>();
+  const modeSwitches = new Map<string, boolean>();
   const directives: DailyDirective[] = [];
 
   for (const day of days) {
@@ -127,34 +128,49 @@ export function applyDailyDirectives(
     }
 
     const exitTrades = sortTradesByExit(tradesByExitDay.get(day) ?? []);
-    for (const trade of exitTrades) {
-      const realizedPnL = trade.realizedPnL;
-      const outcome: ClosedTradeOutcome = realizedPnL >= 0 ? 'WIN' : 'LOSS';
+
+    const hadLossOnDay = exitTrades.some((trade) => trade.realizedPnL < 0);
+    const qualifyingWins = exitTrades.filter((trade) => {
       const modeAtEntry = assignments.get(trade.id)?.modeAtEntry ?? trade.modeAtEntry;
+      return trade.realizedPnL >= 0 && modeAtEntry === 'LOW';
+    });
+    const qualifyingWinsOnDay = qualifyingWins.length;
+
+    let nextMode: RiskMode = mode;
+    let nextLowWinsProgress = lowWinsProgress;
+    let switchTradeId: string | null = null;
+
+    if (hadLossOnDay) {
+      nextMode = mode === 'HIGH' ? 'LOW' : 'LOW';
+      nextLowWinsProgress = 0;
       if (mode === 'HIGH') {
-        if (outcome === 'LOSS') {
-          mode = 'LOW';
-          lowWinsProgress = 0;
+        const lossTrade = exitTrades.find((trade) => trade.realizedPnL < 0);
+        switchTradeId = lossTrade?.id ?? null;
+      }
+    } else if (mode === 'LOW') {
+      const needed = Math.max(strategy.winsToRecover - lowWinsProgress, 0);
+      nextLowWinsProgress = lowWinsProgress + qualifyingWinsOnDay;
+      if (nextLowWinsProgress >= strategy.winsToRecover) {
+        nextMode = 'HIGH';
+        if (needed > 0 && qualifyingWins.length >= needed) {
+          switchTradeId = qualifyingWins[needed - 1]?.id ?? null;
         }
-      } else {
-        if (outcome === 'LOSS') {
-          lowWinsProgress = 0;
-        }
-        if (outcome === 'WIN' && modeAtEntry === 'LOW') {
-          lowWinsProgress += 1;
-          if (lowWinsProgress >= strategy.winsToRecover) {
-            mode = 'HIGH';
-            lowWinsProgress = 0;
-          }
-        }
+        nextLowWinsProgress = 0;
       }
     }
+
+    if (switchTradeId && nextMode !== mode) {
+      modeSwitches.set(switchTradeId, true);
+    }
+
+    mode = nextMode;
+    lowWinsProgress = nextLowWinsProgress;
 
     const dayPnL = exitTrades.reduce((sum, trade) => sum + trade.realizedPnL, 0);
     equityAvailable += dayPnL;
   }
 
-  return { directives, assignments };
+  return { directives, assignments, modeSwitches };
 }
 
 export function calculateRiskStates(

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DashboardProvider } from './stores/dashboardStore';
 import { AppShell } from './components/layout';
-import { DashboardPage, UploadPage, TradesPage, SettingsPage, LegalPage } from './pages';
+import { DashboardPage, MarketDataPage, UploadPage, TradesPage, SettingsPage, LegalPage } from './pages';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 function App() {
@@ -14,6 +14,7 @@ function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/upload" element={<UploadPage />} />
               <Route path="/trades" element={<TradesPage />} />
+              <Route path="/market-data" element={<MarketDataPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/legal" element={<LegalPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
