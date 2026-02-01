@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Card } from '../ui';
 import { formatMoney, formatDate, cn } from '../../lib/utils';
 import type { DailyEquity } from '../../engine/types';
@@ -26,8 +26,8 @@ type AppliedRange = {
   desiredDays?: number;
 };
 
-const CHART_WIDTH = 700;
-const CHART_HEIGHT = 260;
+const DEFAULT_CHART_WIDTH = 700;
+const DEFAULT_CHART_HEIGHT = 260;
 const PADDING = { top: 24, right: 24, bottom: 40, left: 72 };
 
 function getTickValues(min: number, max: number, count: number) {
@@ -85,6 +85,8 @@ export function EquityChart({ data, className }: EquityChartProps) {
   const [chartBounds, setChartBounds] = useState<{ width: number; height: number } | null>(null);
   const [rangeToast, setRangeToast] = useState<string | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+  const chartRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedData = useMemo(() => {
     if (!Array.isArray(data)) return [] as NormalizedEquityPoint[];
@@ -208,8 +210,10 @@ export function EquityChart({ data, className }: EquityChartProps) {
   }, [filteredData]);
 
   const pointCount = chartData ? chartData.values.length : 0;
-  const drawableWidth = CHART_WIDTH - PADDING.left - PADDING.right;
-  const drawableHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
+  const chartWidth = chartSize.width || DEFAULT_CHART_WIDTH;
+  const chartHeight = chartSize.height || DEFAULT_CHART_HEIGHT;
+  const drawableWidth = chartWidth - PADDING.left - PADDING.right;
+  const drawableHeight = chartHeight - PADDING.top - PADDING.bottom;
 
   const displayValues = chartData ? (showDrawdown ? chartData.drawdowns : chartData.values) : [];
   const drawdownMin = chartData ? Math.min(...chartData.drawdowns, 0) : 0;
@@ -229,7 +233,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
 
   const baselineY = showDrawdown
     ? PADDING.top + (1 - (0 - displayMin) / displayRange) * drawableHeight
-    : CHART_HEIGHT - PADDING.bottom;
+    : chartHeight - PADDING.bottom;
 
   const yTicks = getTickValues(displayMin, displayMax, 3);
   const xTickIndices = [0, Math.floor(pointCount * 0.5), pointCount - 1]
@@ -273,6 +277,23 @@ export function EquityChart({ data, className }: EquityChartProps) {
     const id = window.setTimeout(() => setRangeToast(null), 2600);
     return () => window.clearTimeout(id);
   }, [rangeToast]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!chartRef.current) return;
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        const { width, height } = entry.contentRect;
+        setChartSize((prev) => {
+          if (prev.width === width && prev.height === height) return prev;
+          return { width, height };
+        });
+      });
+    });
+    observer.observe(chartRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const getPresetDisabledReason = (preset: TimeframePreset) => {
     if (!dataRange || preset === 'ALL') return null;
@@ -529,7 +550,8 @@ export function EquityChart({ data, className }: EquityChartProps) {
       )}
 
       <div
-        className="relative"
+        ref={chartRef}
+        className="relative w-full h-64 lg:h-72"
         onMouseLeave={() => {
           setHoveredIndex(null);
           setHoveredPosition(null);
@@ -538,15 +560,15 @@ export function EquityChart({ data, className }: EquityChartProps) {
         {hasRangeData ? (
           <>
             <svg
-              viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-              className="w-full h-64"
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+              className="w-full h-full"
               preserveAspectRatio="xMinYMin meet"
               onMouseMove={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
                 const relativeX = (event.clientX - rect.left) / rect.width;
                 const idx = Math.round(relativeX * (pointCount - 1));
-                const scaleX = rect.width / CHART_WIDTH;
-                const scaleY = rect.height / CHART_HEIGHT;
+                const scaleX = rect.width / chartWidth;
+                const scaleY = rect.height / chartHeight;
                 setChartBounds({ width: rect.width, height: rect.height });
                 setHoveredPosition({
                   x: points[Math.max(0, Math.min(idx, pointCount - 1))].x * scaleX,
@@ -566,7 +588,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
                 const y = PADDING.top + (1 - (tick - displayMin) / displayRange) * drawableHeight;
                 return (
                   <g key={tick}>
-                    <line x1={PADDING.left} x2={CHART_WIDTH - PADDING.right} y1={y} y2={y} stroke="rgba(255,255,255,0.12)" strokeDasharray="2,3" />
+                    <line x1={PADDING.left} x2={chartWidth - PADDING.right} y1={y} y2={y} stroke="rgba(255,255,255,0.12)" strokeDasharray="2,3" />
                   </g>
                 );
               })}
@@ -590,7 +612,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
                     x1={hoveredPoint.x}
                     x2={hoveredPoint.x}
                     y1={PADDING.top}
-                    y2={CHART_HEIGHT - PADDING.bottom}
+                    y2={chartHeight - PADDING.bottom}
                     stroke="rgba(255,255,255,0.35)"
                     strokeDasharray="3,4"
                   />
@@ -610,7 +632,7 @@ export function EquityChart({ data, className }: EquityChartProps) {
               {xTickIndices.map((index) => {
                 const x = points[index].x;
                 return (
-                  <text key={index} x={x} y={CHART_HEIGHT - 12} textAnchor="middle" className="fill-ink-muted text-[10px]">
+                  <text key={index} x={x} y={chartHeight - 12} textAnchor="middle" className="fill-ink-muted text-[10px]">
                     {filteredData[index]?.dateKey ? formatDate(filteredData[index].dateKey) : ''}
                   </text>
                 );
