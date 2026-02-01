@@ -5,7 +5,7 @@ import type { Fill, PendingOrder } from "../engine/types";
 describe("dashboard store pending orders", () => {
   test("stores pending orders and keeps inferred stops in derived trades", () => {
     const entryTime = new Date("2026-01-30T14:33:00.000Z");
-    const pendingTime = new Date("2026-01-30T14:33:37.000Z");
+    const pendingTime = new Date("2026-01-30T14:33:01.000Z");
 
     const fill: Fill = {
       id: "fill_test",

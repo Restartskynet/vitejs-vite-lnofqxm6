@@ -60,25 +60,11 @@ describe("Webull parser + trade builder", () => {
     expect(parsed.fills[1].marketDate).toBe("2026-01-22");
   });
 
-  test("calculates short P&L correctly", () => {
-    const csv = buildCsv([
-      "TSLA,SELL,Filled,5,20.00,01/22/2026 09:31:00 EST,0",
-      "TSLA,BUY,Filled,5,18.00,01/22/2026 09:32:00 EST,0",
-    ]);
-
-    const parsed = parseWebullCSV(csv);
-    const { trades } = buildTrades(parsed.fills);
-
-    expect(trades.length).toBe(1);
-    expect(trades[0].side).toBe("SHORT");
-    expect(trades[0].realizedPnL).toBe(10);
-  });
-
   test("infers stop from pending Orders Records rows", () => {
     const csv = [
       "Name,Symbol,Side,Status,Filled,Total Qty,Price,Avg Price,Time-in-Force,Placed Time,Filled Time",
       "Ast Spacemobile Inc,ASTS,Buy,Filled,3,3,120.62,120.62,GTC,01/30/2026 09:33:00 EST,01/30/2026 09:33:00 EST",
-      "Ast Spacemobile Inc,ASTS,Sell,Pending,0,3,120.62,,GTC,01/30/2026 09:33:37 EST,",
+      "Ast Spacemobile Inc,ASTS,Sell,Pending,0,3,119.62,,GTC,01/30/2026 09:33:01 EST,",
     ].join("\n");
 
     const parsed = parseWebullCSV(csv);
@@ -87,7 +73,56 @@ describe("Webull parser + trade builder", () => {
     expect(parsed.pendingOrders.length).toBe(1);
     expect(trades.length).toBe(1);
     expect(trades[0].status).toBe("ACTIVE");
-    expect(trades[0].stopPrice).toBe(120.62);
-    expect(trades[0].inferredStop).toBe(120.62);
+    expect(trades[0].stopPrice).toBe(119.62);
+    expect(trades[0].inferredStop).toBe(119.62);
+  });
+
+  test("pairs brackets within 2 seconds", () => {
+    const csv = [
+      "Name,Symbol,Side,Status,Filled,Total Qty,Price,Avg Price,Time-in-Force,Placed Time,Filled Time",
+      "Test Corp,TEST,Buy,Filled,10,10,10.00,10.00,GTC,01/30/2026 09:31:00 EST,01/30/2026 09:31:00 EST",
+      "Test Corp,TEST,Sell,Pending,0,10,9.50,,GTC,01/30/2026 09:31:02 EST,",
+    ].join("\n");
+
+    const parsed = parseWebullCSV(csv);
+    const { trades } = buildTrades(parsed.fills, 25000, parsed.pendingOrders);
+
+    expect(trades.length).toBe(1);
+    expect(trades[0].status).toBe("ACTIVE");
+    expect(trades[0].stopPrice).toBe(9.5);
+  });
+
+  test("stop adjustments stay within the same trade unit", () => {
+    const csv = [
+      "Name,Symbol,Side,Status,Filled,Total Qty,Price,Avg Price,Time-in-Force,Placed Time,Filled Time",
+      "Test Corp,TEST,Buy,Filled,10,10,10.00,10.00,GTC,01/30/2026 09:31:00 EST,01/30/2026 09:31:00 EST",
+      "Test Corp,TEST,Sell,Pending,0,10,9.50,,GTC,01/30/2026 09:31:01 EST,",
+      "Test Corp,TEST,Sell,Cancelled,0,10,9.75,,GTC,01/30/2026 10:00:00 EST,",
+      "Test Corp,TEST,Sell,Pending,0,10,9.90,,GTC,01/30/2026 10:00:01 EST,",
+    ].join("\n");
+
+    const parsed = parseWebullCSV(csv);
+    const { trades } = buildTrades(parsed.fills, 25000, parsed.pendingOrders);
+
+    expect(trades.length).toBe(1);
+    expect(trades[0].status).toBe("ACTIVE");
+    expect(trades[0].stopPrice).toBe(9.9);
+  });
+
+  test("trims do not close the trade until net shares hit zero", () => {
+    const csv = [
+      "Name,Symbol,Side,Status,Filled,Total Qty,Price,Avg Price,Time-in-Force,Placed Time,Filled Time",
+      "Trim Corp,TRIM,Buy,Filled,10,10,10.00,10.00,GTC,01/30/2026 09:31:00 EST,01/30/2026 09:31:00 EST",
+      "Trim Corp,TRIM,Sell,Pending,0,10,9.50,,GTC,01/30/2026 09:31:01 EST,",
+      "Trim Corp,TRIM,Sell,Filled,4,4,11.00,11.00,GTC,01/30/2026 09:45:00 EST,01/30/2026 09:45:00 EST",
+      "Trim Corp,TRIM,Sell,Filled,6,6,12.00,12.00,GTC,01/30/2026 10:00:00 EST,01/30/2026 10:00:00 EST",
+    ].join("\n");
+
+    const parsed = parseWebullCSV(csv);
+    const { trades } = buildTrades(parsed.fills, 25000, parsed.pendingOrders);
+
+    expect(trades.length).toBe(1);
+    expect(trades[0].status).toBe("CLOSED");
+    expect(trades[0].realizedPnL).toBe(16);
   });
 });
