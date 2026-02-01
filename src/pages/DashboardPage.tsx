@@ -237,7 +237,7 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <Page title="Restart Dash">
+      <Page title="Restart's Co-Pilot">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
         </div>
@@ -247,7 +247,7 @@ export function DashboardPage() {
 
   if (!hasData) {
     return (
-      <Page title="Restart Dash" subtitle="Import trades to activate your daily risk plan.">
+      <Page title="Restart's Co-Pilot" subtitle="Import trades to activate your daily risk plan.">
         <Card className="border-[rgb(var(--accent-low)/0.45)] bg-white/[0.06]">
           <div className="flex flex-col items-start gap-6">
             <div>
