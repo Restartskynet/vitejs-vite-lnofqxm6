@@ -30,7 +30,7 @@ export function Header() {
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-white tracking-tight font-display truncate">Restart's Co-Pilot</h1>
               <p className="text-[10px] text-ink-muted uppercase tracking-wider hidden sm:block truncate">
-                Restart’s Trading Dashboard
+                Restart's Trading Dashboard
               </p>
             </div>
           </div>

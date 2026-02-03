@@ -56,7 +56,7 @@ export function DashboardPage() {
       return [
         {
           title: 'Awaiting import',
-          detail: 'Upload a Webull CSV to activate today’s watchlist.',
+          detail: "Upload a Webull CSV to activate today's watchlist.",
           status: 'neutral',
         },
       ];
@@ -71,7 +71,7 @@ export function DashboardPage() {
         },
         {
           title: 'Rule enforcement',
-          detail: 'Keep entries aligned with today’s mode limits.',
+          detail: "Keep entries aligned with today's mode limits.",
           status: 'neutral',
         },
       ];
@@ -110,7 +110,7 @@ export function DashboardPage() {
                 Proven risk strategy. Compounding outcomes.
               </p>
               <p className="mt-2 text-sm text-ink-muted">
-                Restart’s Trading Co-Pilot applies a disciplined risk model that protects drawdowns and scales winners so your equity curve stays on track.
+                Restart's Trading Co-Pilot applies a disciplined risk model that protects drawdowns and scales winners so your equity curve stays on track.
               </p>
               <ul className="mt-4 text-xs text-ink-muted space-y-1 list-disc list-inside">
                 <li>Mode-aware risk sizing based on real trade outcomes.</li>
@@ -168,7 +168,7 @@ export function DashboardPage() {
 
   return (
     <Page
-      title="Restart’s Co-Pilot"
+      title="Restart's Co-Pilot"
       subtitle="A risk strategy engine built to protect drawdowns and compound equity."
       action={
         <Button
@@ -228,7 +228,7 @@ export function DashboardPage() {
                           </svg>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.3em] text-ink-muted">Today’s Risk</p>
+                          <p className="text-xs uppercase tracking-[0.3em] text-ink-muted">Today's Risk</p>
                           <div className="flex flex-wrap items-end gap-3">
                             <h2
                               className={cn(
@@ -301,9 +301,9 @@ export function DashboardPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">First run: activate today’s risk</h3>
+                    <h3 className="text-lg font-semibold text-white mb-2">First run: activate today's risk</h3>
                     <p className="text-sm text-ink-muted mb-4 max-w-md">
-                      Restart’s Trading Co-Pilot calculates your daily risk mode from your own CSV imports. Start by loading today’s file.
+                      Restart's Trading Co-Pilot calculates your daily risk mode from your own CSV imports. Start by loading today's file.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <Button onClick={() => navigate('/upload')}>
