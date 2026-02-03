@@ -6,6 +6,8 @@ const CONFLICT_WINDOW_MS = 5 * 60 * 1000;
 
 const deepEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+const normalizeSchemaVersion = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+
 const sortFills = (fills: PersistedFill[]): PersistedFill[] =>
   [...fills].sort((a, b) => {
     const timeDiff = new Date(a.filledTime).getTime() - new Date(b.filledTime).getTime();
@@ -75,9 +77,27 @@ export function mergeSyncData(local: SyncData, remote: SyncData, localUpdatedAt:
   const localTime = new Date(localUpdatedAt).getTime();
   const remoteTime = new Date(remoteUpdatedAt).getTime();
   const chooseRemote = remoteTime > localTime;
+  const localSchemaVersion = normalizeSchemaVersion(local.schemaVersion);
+  const remoteSchemaVersion = normalizeSchemaVersion(remote.schemaVersion);
+  const preferRemoteBase = remoteSchemaVersion > localSchemaVersion || (remoteSchemaVersion === localSchemaVersion && chooseRemote);
+  const mergedBase = preferRemoteBase ? { ...local, ...remote } : { ...remote, ...local };
 
-  const mergedSettings = chooseRemote ? remote.settings : local.settings;
-  const mergedStrategy = chooseRemote ? remote.strategy : local.strategy;
+  const schemaPrefersRemote = remoteSchemaVersion > localSchemaVersion;
+  const schemaPrefersLocal = localSchemaVersion > remoteSchemaVersion;
+  const mergedSettings = schemaPrefersRemote
+    ? remote.settings
+    : schemaPrefersLocal
+      ? local.settings
+      : chooseRemote
+        ? remote.settings
+        : local.settings;
+  const mergedStrategy = schemaPrefersRemote
+    ? remote.strategy
+    : schemaPrefersLocal
+      ? local.strategy
+      : chooseRemote
+        ? remote.strategy
+        : local.strategy;
 
   const conflicts: SyncMergeResult['conflicts'] = [];
   if (Math.abs(remoteTime - localTime) <= CONFLICT_WINDOW_MS) {
@@ -91,7 +111,8 @@ export function mergeSyncData(local: SyncData, remote: SyncData, localUpdatedAt:
 
   return {
     merged: {
-      schemaVersion: local.schemaVersion,
+      ...mergedBase,
+      schemaVersion: Math.max(localSchemaVersion, remoteSchemaVersion),
       fills: mergedFills,
       fillFingerprints: mergedFingerprints,
       settings: mergedSettings,

@@ -415,6 +415,9 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
     case 'IMPORT_BACKUP': {
       const { data, mode } = action.payload;
       const nextStrategy = (data as PersistedData & { strategy?: StrategyConfig }).strategy ?? state.strategy;
+      const schemaWarning = data.schemaVersion > CURRENT_SCHEMA_VERSION
+        ? `Data was created with a newer version (v${data.schemaVersion}). Some features may not work correctly.`
+        : null;
       
       if (mode === 'replace') {
         // Replace all data
@@ -447,6 +450,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           adjustments: data.adjustments || [],
           pendingOrders,
           strategy: nextStrategy,
+          schemaWarning,
           ...derived,
           hasData: fills.length > 0,
         };
@@ -539,6 +543,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           adjustments: mergedAdjustments,
           pendingOrders: mergedPendingOrders,
           strategy: nextStrategy,
+          schemaWarning,
           ...derived,
           hasData: mergedFills.length > 0,
         };
@@ -699,7 +704,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Persist data when state changes (debounced)
   useEffect(() => {
-    if (!state.isHydrated || state.isLoading) return;
+    if (!state.isHydrated || state.isLoading || state.schemaWarning) return;
 
     setSaveQueued(true);
     const timeout = setTimeout(async () => {
@@ -749,7 +754,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }, 1000);
 
     return () => clearTimeout(timeout);
-  }, [state.fills, state.settings, state.importHistory, state.adjustments, state.strategy, state.pendingOrders, state.isHydrated, state.isLoading, state.fillFingerprints]);
+  }, [
+    state.fills,
+    state.settings,
+    state.importHistory,
+    state.adjustments,
+    state.strategy,
+    state.pendingOrders,
+    state.isHydrated,
+    state.isLoading,
+    state.schemaWarning,
+    state.fillFingerprints,
+  ]);
 
   // Actions
   const setUploadStatus = useCallback((status: UploadStatus) => {
