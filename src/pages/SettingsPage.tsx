@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useDashboard } from '../stores/dashboardStore';
+import { useAuth } from '../stores/authStore';
+import { useSync } from '../stores/syncStore';
 import { Page } from '../components/layout';
 import { Card, Button, CurrencyInput, Input, Badge, ConfirmModal } from '../components/ui';
+import { clientEnv } from '../lib/env';
 import { ImportHistory } from '../components/upload';
 import { AdjustmentsTable } from '../components/adjustments';
 import { StrategyModal } from '../components/strategy';
@@ -12,7 +15,10 @@ import type { PersistedFill, PersistedData, PersistedPendingOrder } from '../typ
 
 export function SettingsPage() {
   const { state, actions } = useDashboard();
+  const { state: authState, actions: authActions } = useAuth();
+  const { state: syncState, actions: syncActions } = useSync();
   const { settings, adjustments, hasData, importHistory, schemaWarning, strategy, fills, pendingOrders } = state;
+  const syncDisabled = clientEnv.VITE_SYNC_KILL_SWITCH === '1' || !clientEnv.VITE_STYTCH_PUBLIC_TOKEN;
 
   const themeOptions = [
     {
@@ -57,6 +63,11 @@ export function SettingsPage() {
   
   const [showResetModal, setShowResetModal] = useState(false);
   const [showStrategyModal, setShowStrategyModal] = useState(false);
+  const [showSyncResetModal, setShowSyncResetModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [syncPassphrase, setSyncPassphrase] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(syncState.rememberDevice);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -80,6 +91,10 @@ export function SettingsPage() {
     }
   }, [isGridEnabled]);
 
+  useEffect(() => {
+    setRememberDevice(syncState.rememberDevice);
+  }, [syncState.rememberDevice]);
+
   const handleStartingEquityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value > 0) actions.updateSettings({ startingEquity: value });
@@ -92,6 +107,65 @@ export function SettingsPage() {
   const handleClearData = async () => {
     await actions.clearData();
     setShowResetModal(false);
+  };
+
+  const handleEnableSync = async () => {
+    try {
+      setSyncMessage(null);
+      if (syncDisabled) {
+        setSyncMessage('Cloud sync is disabled by environment configuration.');
+        return;
+      }
+      if (!syncPassphrase) {
+        setSyncMessage('Enter your sync passphrase to unlock cloud sync.');
+        return;
+      }
+      await syncActions.unlockWithPassphrase(syncPassphrase, rememberDevice);
+      syncActions.setEnabled(true);
+      setSyncMessage('Cloud sync is unlocked for this session.');
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'Unable to unlock sync.');
+    }
+  };
+
+  const handleSyncNow = async () => {
+    try {
+      await syncActions.syncNow();
+      setSyncMessage('Sync completed successfully.');
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'Sync failed.');
+    }
+  };
+
+  const handleDisconnect = () => {
+    syncActions.disconnect();
+    setSyncMessage('Cloud sync is disabled on this device.');
+  };
+
+  const handleResetSync = async () => {
+    try {
+      await syncActions.resetRemote();
+      setShowSyncResetModal(false);
+      setSyncMessage('Cloud sync data has been reset.');
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'Unable to reset cloud sync.');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      await syncActions.deleteAccount();
+      authActions.signOut();
+      setShowDeleteModal(false);
+      setSyncMessage('Account deletion requested. Remote sync data has been removed.');
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'Unable to delete account.');
+    }
+  };
+
+  const formatTimestamp = (value: string | null) => {
+    if (!value) return 'Not yet';
+    return new Date(value).toLocaleString();
   };
 
   // Convert fills to persisted format for backup
@@ -293,6 +367,186 @@ export function SettingsPage() {
           </div>
         </Card>
 
+        {syncDisabled ? (
+          <Card className="lg:col-span-2">
+            <h3 className="text-lg font-semibold text-white mb-2">Account &amp; Cloud Sync</h3>
+            <p className="text-sm text-ink-muted">
+              Cloud sync and authentication are currently disabled by environment configuration. Local-only mode
+              remains fully available.
+            </p>
+          </Card>
+        ) : (
+          <Card className="lg:col-span-2">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Account &amp; Cloud Sync</h3>
+                <p className="text-xs text-ink-muted">
+                  Optional encrypted sync for Restart's Trading Co-Pilot. Local-only mode stays available.
+                </p>
+              </div>
+              {!authState.session ? (
+                <Link to="/auth">
+                  <Button size="sm">Sign in / Create account</Button>
+                </Link>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={authActions.signOut}>
+                  Sign out
+                </Button>
+              )}
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Status</p>
+                <p className="text-sm text-white">
+                  {authState.session ? `Signed in as ${authState.session.email || 'Stytch user'}` : 'Signed out'}
+                </p>
+                <p className="text-xs text-ink-muted">Device: {syncState.deviceName}</p>
+                <p className="text-xs text-ink-muted">Device ID: {syncState.deviceId}</p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Cloud sync</p>
+                  <button
+                    type="button"
+                    onClick={() => syncActions.setEnabled(!syncState.enabled)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+                      syncState.enabled
+                        ? 'border-[rgb(var(--accent-low)/0.6)] bg-[rgb(var(--accent-low)/0.35)]'
+                        : 'border-white/20 bg-white/10'
+                    }`}
+                    aria-pressed={syncState.enabled}
+                    disabled={!authState.session}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        syncState.enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                <p className="text-xs text-ink-muted">
+                  {authState.session
+                    ? 'Encrypted sync stays on unless you disconnect.'
+                    : 'Sign in to enable cloud sync.'}
+                </p>
+                <div className="space-y-2">
+                  <Input
+                    type="password"
+                    placeholder="Sync passphrase"
+                    value={syncPassphrase}
+                    onChange={(event) => setSyncPassphrase(event.target.value)}
+                    disabled={!authState.session}
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Please don't forget this. Without it, we can't recover your synced data.
+                  </p>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={rememberDevice}
+                      onChange={(event) => setRememberDevice(event.target.checked)}
+                      disabled={!authState.session}
+                    />
+                    Remember this device (requires passkey unlock)
+                  </label>
+                  <Button size="sm" onClick={handleEnableSync} disabled={!authState.session}>
+                    Unlock sync
+                  </Button>
+                  {syncState.rememberDevice && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        try {
+                          await syncActions.unlockWithRememberedKey();
+                          setSyncMessage('Passkey verified. Sync is unlocked.');
+                        } catch (error) {
+                          setSyncMessage(error instanceof Error ? error.message : 'Unable to unlock with passkey.');
+                        }
+                      }}
+                    >
+                      Unlock with passkey
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Sync status</p>
+                <p className="text-sm text-white">Last success: {formatTimestamp(syncState.lastSuccessAt)}</p>
+                {syncState.lastError && <p className="text-xs text-rose-400">Last error: {syncState.lastError}</p>}
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button size="sm" variant="secondary" onClick={handleSyncNow} disabled={!syncState.enabled}>
+                    Sync now
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={handleDisconnect}>
+                    Disconnect
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {syncMessage && <p className="mt-4 text-sm text-emerald-400">{syncMessage}</p>}
+
+            {syncState.conflictKeys.length > 0 && (
+              <div className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+                <p className="text-sm text-amber-200 font-semibold mb-2">Sync conflict detected</p>
+                <p className="text-xs text-amber-100/80 mb-3">
+                  Both devices updated the same settings. Choose how to resolve the conflict.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={async () => {
+                      syncActions.clearConflict();
+                      await handleSyncNow();
+                    }}
+                  >
+                    Keep local
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={async () => {
+                      syncActions.clearConflict();
+                      await syncActions.pullLatest();
+                    }}
+                  >
+                    Keep remote
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled>
+                    Merge
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-sm font-semibold text-white mb-1">Reset cloud sync data</p>
+                <p className="text-xs text-ink-muted mb-3">
+                  If you forget your sync passphrase and have no remembered device, reset the encrypted cloud snapshot.
+                </p>
+                <Button size="sm" variant="danger" onClick={() => setShowSyncResetModal(true)} disabled={!authState.session}>
+                  Reset cloud sync
+                </Button>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-sm font-semibold text-white mb-1">Delete account</p>
+                <p className="text-xs text-ink-muted mb-3">
+                  This deletes your cloud snapshot immediately. Local data remains unless you reset it manually.
+                </p>
+                <Button size="sm" variant="danger" onClick={() => setShowDeleteModal(true)} disabled={!authState.session}>
+                  Delete account
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Manual Adjustments */}
         <div className="lg:col-span-2">
           <AdjustmentsTable
@@ -361,7 +615,7 @@ export function SettingsPage() {
         <Card className="lg:col-span-2">
           <h3 className="text-lg font-semibold text-white mb-2">Legal &amp; About</h3>
           <p className="text-sm text-slate-400">
-            Restart’s Trading Co-Pilot helps you stick to a deterministic risk plan using your own CSV imports. All processing is local-only.
+            Restart's Trading Co-Pilot helps you stick to a deterministic risk plan using your own CSV imports. All processing is local-only.
           </p>
           <p className="text-xs text-ink-muted mt-2">
             Results vary. Process required. This tool does not provide financial advice.
@@ -400,6 +654,27 @@ export function SettingsPage() {
         message="This will permanently delete all your imported fills, trades, and import history. Your settings will be preserved. This action cannot be undone."
         confirmText="Reset"
         confirmVariant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={showSyncResetModal}
+        onClose={() => setShowSyncResetModal(false)}
+        onConfirm={handleResetSync}
+        title="Reset Cloud Sync Data"
+        message="This deletes the encrypted cloud snapshot immediately. Use this only if you have lost your sync passphrase and no remembered device can unlock your data."
+        confirmText="Reset Cloud Sync"
+        confirmVariant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteAccount}
+        title="Delete Account"
+        message="Type DELETE to remove your cloud sync data and account-linked records. Local data will remain unless you reset it manually."
+        confirmText="Delete Account"
+        confirmVariant="danger"
+        requireTypedConfirmation="DELETE"
       />
     </Page>
   );

@@ -1,6 +1,6 @@
 {
-  "name": "Restart’s Trading Co-Pilot",
-  "short_name": "Restart Dash",
+  "name": "Restart's Trading Co-Pilot",
+  "short_name": "Restart's Co-Pilot",
   "description": "Local-first trading co-pilot for focused risk execution.",
   "start_url": "/",
   "display": "standalone",

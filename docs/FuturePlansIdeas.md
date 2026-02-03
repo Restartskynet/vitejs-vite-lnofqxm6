@@ -16,15 +16,15 @@ This document captures forward-looking product, marketing, and UX/engineering id
 ## 2) Top SaaS Website Design Principles & Best Practices
 
 ### Clear value proposition & messaging
-- Communicate **who it’s for**, **what it solves**, and **why it’s different** within a **6–10 word** hero message.
-- In our case, center the hero on **today’s risk mode + risk %**.
+- Communicate **who it's for**, **what it solves**, and **why it's different** within a **6–10 word** hero message.
+- In our case, center the hero on **today's risk mode + risk %**.
 
-### Show, don’t just tell
+### Show, don't just tell
 - Use real **product UI**, motion, interactive elements, and micro-demos—not walls of text.
 
 ### Conversion-focused layout
 - Strong **Primary CTA** (e.g., “Get Started” / “Free Risk Audit”).
-- Secondary **low-friction CTA** (e.g., “Request Demo” / “See Today’s Active Signals”).
+- Secondary **low-friction CTA** (e.g., “Request Demo” / “See Today's Active Signals”).
 
 ### Minimalism & high contrast
 - Use whitespace to reduce cognitive load.
@@ -53,7 +53,7 @@ This document captures forward-looking product, marketing, and UX/engineering id
 - Use an outcome-based headline (6–10 words) rather than listing features.
 - Provide:
   - **Primary CTA** (e.g., “Start Free Trial” / “Get Your Free Risk Audit”)
-  - **Secondary CTA** (e.g., “Test Demo” / “See Today’s Active Signals”)
+  - **Secondary CTA** (e.g., “Test Demo” / “See Today's Active Signals”)
 
 ---
 
@@ -82,7 +82,7 @@ This document captures forward-looking product, marketing, and UX/engineering id
   - “Make data-driven decisions 10× faster” instead of “Advanced reporting.”
 
 ### Integration showcase
-- Explicitly show how it fits into a user’s stack (e.g., broker CSV → engine → dashboard).
+- Explicitly show how it fits into a user's stack (e.g., broker CSV → engine → dashboard).
 
 ---
 
@@ -149,14 +149,14 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 
 ### Dynamic hero
 - Subtle animation of a “live” market chart with the PWA overlay.
-- Show HIGH/LOW mode changing dynamically to prove it’s functional.
+- Show HIGH/LOW mode changing dynamically to prove it's functional.
 
 ### Example headline (6–10 words)
 - “Stop Trading Emotionally. Start Trading Systematically. Get Your Daily Risk Budget.”
 
 ### CTA direction
 - Primary: “Get Your Free Risk Audit” (lower friction than “Start trial”)
-- Secondary: “See Today’s Active Signals” (scanner feature value immediately)
+- Secondary: “See Today's Active Signals” (scanner feature value immediately)
 
 ---
 
@@ -197,7 +197,7 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 
 ### Edge personalization
 - Use middleware to detect returning users:
-  - If imported before: hero becomes “Welcome back. Ready for today’s Risk Budget?”
+  - If imported before: hero becomes “Welcome back. Ready for today's Risk Budget?”
 
 ### “Audit Trail” trust section
 - Visual step-through:
@@ -224,7 +224,7 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 ## 12) Performance Engineering as Marketing
 
 - In 2026, speed signals **system integrity**.
-- If the site is slow, traders won’t trust risk calculations.
+- If the site is slow, traders won't trust risk calculations.
 
 ### “Zero-bundle” landing page idea
 - Consider an Astro-style marketing site that ships **near-zero JS** until interaction.
@@ -240,7 +240,7 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 ## 13) Restart Throttle Interaction Design (Make the USP Feel Physical)
 
 ### Kinetic feedback
-- When throttle moves HIGH → LOW, don’t just change text.
+- When throttle moves HIGH → LOW, don't just change text.
 - Use layout transitions where UI “contracts/tightens” to represent control and restriction.
 
 ### If/Then visualizer
@@ -255,7 +255,7 @@ Instead of a generic SaaS hero, the site should immediately immerse the user in 
 
 ### “Your data never leaves your device”
 - Make this a primary trust headline.
-- Explain engine runs locally (browser/PWA), potentially via WebAssembly, so CSV data isn’t sitting on a server.
+- Explain engine runs locally (browser/PWA), potentially via WebAssembly, so CSV data isn't sitting on a server.
 
 ### Local-only mode (“Stealth Mode”)
 - A toggle that visually locks/hides sensitive info.

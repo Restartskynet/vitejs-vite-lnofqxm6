@@ -414,6 +414,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
 
     case 'IMPORT_BACKUP': {
       const { data, mode } = action.payload;
+      const nextStrategy = (data as PersistedData & { strategy?: StrategyConfig }).strategy ?? state.strategy;
       
       if (mode === 'replace') {
         // Replace all data
@@ -433,7 +434,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           fills, 
           data.settings?.startingEquity || state.settings.startingEquity,
           data.adjustments || [],
-          state.strategy,
+          nextStrategy,
           pendingOrders
         );
         
@@ -445,6 +446,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           importHistory: data.importHistory || [],
           adjustments: data.adjustments || [],
           pendingOrders,
+          strategy: nextStrategy,
           ...derived,
           hasData: fills.length > 0,
         };
@@ -525,7 +527,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           mergedFills, 
           state.settings.startingEquity,
           mergedAdjustments,
-          state.strategy,
+          nextStrategy,
           mergedPendingOrders
         );
         
@@ -536,6 +538,7 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
           importHistory: mergedHistory,
           adjustments: mergedAdjustments,
           pendingOrders: mergedPendingOrders,
+          strategy: nextStrategy,
           ...derived,
           hasData: mergedFills.length > 0,
         };
