@@ -1,4 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDashboard } from '../stores/dashboardStore';
 import { Page, Section } from '../components/layout';
 import { Card, Badge, Button, ModeBadge } from '../components/ui';
@@ -45,6 +46,7 @@ function KPIItem({
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { state } = useDashboard();
   const { currentRisk, metrics, dailyEquity, hasData, isLoading, trades, strategy, settings } = state;
   const activeTrades = trades.filter((trade) => trade.status === 'ACTIVE');
@@ -125,7 +127,7 @@ export function DashboardPage() {
                 <div className="mt-2 flex items-center gap-4">
                   <Button
                     size="lg"
-                    onClick={() => (window.location.href = '/upload')}
+                    onClick={() => navigate('/upload')}
                     className="cta-hero w-full sm:w-auto"
                   >
                     Import CSV
@@ -170,7 +172,7 @@ export function DashboardPage() {
       subtitle="A risk strategy engine built to protect drawdowns and compound equity."
       action={
         <Button
-          onClick={() => (window.location.href = '/upload')}
+          onClick={() => navigate('/upload')}
           className={cn(
             'motion-safe:animate-pulse',
             isHighMode
@@ -304,10 +306,10 @@ export function DashboardPage() {
                       Restart’s Trading Co-Pilot calculates your daily risk mode from your own CSV imports. Start by loading today’s file.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <Button onClick={() => (window.location.href = '/upload')}>
+                      <Button onClick={() => navigate('/upload')}>
                         Import CSV
                       </Button>
-                      <Button variant="secondary" onClick={() => (window.location.href = '/upload')}>
+                      <Button variant="secondary" onClick={() => navigate('/upload')}>
                         Explore demo data
                       </Button>
                     </div>
