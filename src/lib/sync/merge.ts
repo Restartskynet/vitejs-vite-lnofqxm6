@@ -82,8 +82,22 @@ export function mergeSyncData(local: SyncData, remote: SyncData, localUpdatedAt:
   const preferRemoteBase = remoteSchemaVersion > localSchemaVersion || (remoteSchemaVersion === localSchemaVersion && chooseRemote);
   const mergedBase = preferRemoteBase ? { ...local, ...remote } : { ...remote, ...local };
 
-  const mergedSettings = chooseRemote ? remote.settings : local.settings;
-  const mergedStrategy = chooseRemote ? remote.strategy : local.strategy;
+  const schemaPrefersRemote = remoteSchemaVersion > localSchemaVersion;
+  const schemaPrefersLocal = localSchemaVersion > remoteSchemaVersion;
+  const mergedSettings = schemaPrefersRemote
+    ? remote.settings
+    : schemaPrefersLocal
+      ? local.settings
+      : chooseRemote
+        ? remote.settings
+        : local.settings;
+  const mergedStrategy = schemaPrefersRemote
+    ? remote.strategy
+    : schemaPrefersLocal
+      ? local.strategy
+      : chooseRemote
+        ? remote.strategy
+        : local.strategy;
 
   const conflicts: SyncMergeResult['conflicts'] = [];
   if (Math.abs(remoteTime - localTime) <= CONFLICT_WINDOW_MS) {

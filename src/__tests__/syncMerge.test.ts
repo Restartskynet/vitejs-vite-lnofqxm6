@@ -60,12 +60,13 @@ describe('mergeSyncData', () => {
   });
 
   it('preserves the newer schemaVersion when remote is newer', () => {
-    const local = { ...baseData, schemaVersion: 1 };
-    const remote = { ...baseData, schemaVersion: CURRENT_SCHEMA_VERSION + 2 };
+    const local = { ...baseData, schemaVersion: 1, settings: { ...DEFAULT_SETTINGS, startingEquity: 10000 } };
+    const remote = { ...baseData, schemaVersion: CURRENT_SCHEMA_VERSION + 2, settings: { ...DEFAULT_SETTINGS, startingEquity: 20000 } };
 
-    const result = mergeSyncData(local, remote, '2024-02-01T00:00:00.000Z', '2024-03-01T00:00:00.000Z');
+    const result = mergeSyncData(local, remote, '2024-03-01T00:00:00.000Z', '2024-02-01T00:00:00.000Z');
     expect(result.merged.schemaVersion).toBe(remote.schemaVersion);
     expect(result.merged.schemaVersion).toBeGreaterThan(CURRENT_SCHEMA_VERSION);
+    expect(result.merged.settings.startingEquity).toBe(20000);
   });
 
   it('preserves the newer schemaVersion when local is newer', () => {
