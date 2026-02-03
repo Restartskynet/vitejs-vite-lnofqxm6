@@ -35,6 +35,8 @@ Phase 4 adds an **optional** account + cloud sync feature so users can use the a
   - No Auth0.
   - No Clerk.
   - No mixing auth systems.
+  - Session tokens are held **in-memory only** in the browser and sent via the `Authorization` header.
+  - Tokens are never stored in localStorage and never placed in URLs.
 
 ---
 
@@ -145,7 +147,7 @@ If auth uses cookies:
 
 - All `/api/*` endpoints must implement CSRF defense:
   - verify `Origin` / `Referer` is same-site, and/or
-  - require a custom header (e.g., `X-App-Request: 1`) that browsers won’t send cross-site
+  - require a custom header (e.g., `X-App-Request: 1`) that browsers won't send cross-site
 - Cookies must be `Secure + HttpOnly + SameSite=Lax/Strict` where compatible with the auth flow
 
 ---

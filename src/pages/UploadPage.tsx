@@ -205,7 +205,7 @@ export function UploadPage() {
   const scanStage = scanSteps[scanIndex] ?? scanSteps[0];
 
   return (
-    <Page title="Import Trades" subtitle="Local-only CSV import for Restart’s Trading Co-Pilot">
+    <Page title="Import Trades" subtitle="Local-only CSV import for Restart's Trading Co-Pilot">
       <div className="mb-8">
         <div className="sm:hidden rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
           <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-ink-muted">
@@ -323,7 +323,7 @@ export function UploadPage() {
                   {activeBrokerage?.comingSoon ? (
                     <p className="text-xs text-ink-muted">
                       Export guidance for {activeBrokerage.label.replace(' (coming soon)', '')} is in progress.
-                      We’ll add step-by-step coverage in a future update.
+                      We'll add step-by-step coverage in a future update.
                     </p>
                   ) : (
                     <ol className="space-y-1 text-xs text-ink-muted list-decimal list-inside">
@@ -422,7 +422,7 @@ export function UploadPage() {
 
           {preview.detectedFormat === 'unknown' && (
             <div className="mb-6 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-xs text-amber-100">
-              This file doesn’t look like a Webull Orders Records export yet. Double-check you downloaded the Orders Records
+              This file doesn't look like a Webull Orders Records export yet. Double-check you downloaded the Orders Records
               CSV and kept all default columns before continuing.
             </div>
           )}

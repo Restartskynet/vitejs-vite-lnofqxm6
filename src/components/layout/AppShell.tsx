@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Header } from './Header';
 import { MobileNavigation } from './Navigation';
 import { cn } from '../../lib/utils';
+import { SyncUnlockOverlay } from '../sync/SyncUnlockOverlay';
 
 export function AppShell({ children, className }: { children: ReactNode; className?: string }) {
   useEffect(() => {
@@ -32,6 +33,7 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
         <div className="absolute inset-0 opacity-[0.08] mix-blend-screen bg-[linear-gradient(transparent_0%,_rgba(255,255,255,0.08)_50%,_transparent_100%)]" />
       </div>
       <Header />
+      <SyncUnlockOverlay />
       <main className={cn('max-w-7xl mx-auto w-full min-w-0 px-4 sm:px-6 py-6 sm:py-8 relative pb-32 sm:pb-8 flex-1', className)}>
         {children}
       </main>
@@ -39,11 +41,11 @@ export function AppShell({ children, className }: { children: ReactNode; classNa
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 text-sm text-ink-muted">
             <div>
-              <p className="text-white font-semibold">Restart’s Trading Co-Pilot</p>
+              <p className="text-white font-semibold">Restart's Trading Co-Pilot</p>
               <p className="text-xs text-ink-muted">Local-first • Deterministic • Audit-ready</p>
             </div>
             <div className="flex flex-col items-start lg:items-end gap-1 text-xs text-ink-muted">
-              <p>Restart’s Trading Co-Pilot reinforces risk process. Not financial advice.</p>
+              <p>Restart's Trading Co-Pilot reinforces risk process. Not financial advice.</p>
               <Link to="/legal" className="text-xs text-ink-muted hover:text-white transition-colors">
                 Legal &amp; Data Disclaimer
               </Link>

@@ -1,11 +1,11 @@
-# Restart’s Trading Co-Pilot — Developer Docs
+# Restart's Trading Co-Pilot — Developer Docs
 
-Restart’s Trading Co-Pilot is an offline-first strategy dashboard focused on **risk mode**, **position sizing**, and **active trade visibility**. It ingests broker export data (currently **Webull Orders Records CSV**) and reconstructs fills → trades → derived equity/risk so the UI can answer, at a glance:
+Restart's Trading Co-Pilot is an offline-first strategy dashboard focused on **risk mode**, **position sizing**, and **active trade visibility**. It ingests broker export data (currently **Webull Orders Records CSV**) and reconstructs fills → trades → derived equity/risk so the UI can answer, at a glance:
 
-- **What is today’s risk?**
+- **What is today's risk?**
 - **What mode am I in (LOW/HIGH) and what will change it?**
-- **What live trades are active and what’s their exposure?**
-- **What’s my equity curve / drawdown based on imported history?**
+- **What live trades are active and what's their exposure?**
+- **What's my equity curve / drawdown based on imported history?**
 
 These docs are for developers working on this repo. They define contracts and invariants so changes stay correct and testable.
 
@@ -42,9 +42,9 @@ This app is offline-first. Persisted data lives in **IndexedDB**:
 When debugging imports, you often want a clean slate.
 
 Preferred options:
-1) Use the app’s “reset/clear” control if present (best UX).
+1) Use the app's “reset/clear” control if present (best UX).
 2) From DevTools: Application → IndexedDB → delete the DB used by the app.
-3) Programmatic dev helper (only if one exists in code; don’t add one unless necessary).
+3) Programmatic dev helper (only if one exists in code; don't add one unless necessary).
 
 **Rule:** never “partially clear” tables when debugging import correctness; it creates false-positive states.
 
@@ -72,7 +72,7 @@ Preferred options:
 
 ## Core pipeline
 
-The app’s “truth” flows through this pipeline:
+The app's “truth” flows through this pipeline:
 
 1) **CSV ingest**
    - Read file, detect format, parse rows
