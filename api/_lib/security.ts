@@ -24,9 +24,17 @@ export const requireAppRequest = (req: ReqLike, res: ResLike): boolean => {
   const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
   const hostHeader = req.headers.host;
   const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-  if (origin && host && !origin.includes(host)) {
-    res.status(403).json({ message: 'Origin check failed.' });
-    return false;
+  if (origin && host) {
+    try {
+      const originHost = new URL(origin).host;
+      if (originHost !== host) {
+        res.status(403).json({ message: 'Origin check failed.' });
+        return false;
+      }
+    } catch {
+      res.status(403).json({ message: 'Origin check failed.' });
+      return false;
+    }
   }
 
   return true;
