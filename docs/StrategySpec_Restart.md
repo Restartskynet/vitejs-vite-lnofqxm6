@@ -69,7 +69,7 @@ This is a throttle: you start at full risk and only get throttled down after los
 Process each completed trade in chronological close order:
 
 #### If trade is Breakeven (pnl = 0)
-- Add + 1 to win counter/progress (new)
+- Add + 1 to win counter/progress (new, updated)
 
 #### If mode is HIGH
 - If trade is Loss:
