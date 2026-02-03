@@ -297,6 +297,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (!authState.session) {
       throw new Error('You must be signed in to sync.');
     }
+    if (dashboardState.schemaWarning) {
+      throw new Error('Data was created with a newer app version. Update the app before syncing.');
+    }
     if (!syncState.enabled) {
       throw new Error('Cloud sync is disabled.');
     }
