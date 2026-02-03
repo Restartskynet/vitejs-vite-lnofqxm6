@@ -27,7 +27,7 @@ A “trade” is a completed position session produced by the engine:
 ### 2.2 Win / Loss / Breakeven (per trade)
 - Win: `pnl > 0`
 - Loss: `pnl < 0`
-- Breakeven: `pnl = 0` (ignored for all counters)
+- Breakeven: `pnl = 0` (adds + 1 to win, breakeven considered win now)
 
 Win threshold in v1 is exactly `0`.
 
@@ -49,7 +49,7 @@ These values are the v1 defaults (from the workbook Control Panel):
 - `lossesToDropToLow = 1`
 - `winsToReturnToHigh = 2`
 - `countWinsOnlyInLow = true`
-- `deferSwitchUntilNextDay = false` (switch applies immediately to the next trade)
+- `deferSwitchUntilNextDay = false` (switch applies immediately to the next trade, however, the risk % that is displayed on hero panel in dashboard should not update until next day after the switch has been triggered (since it's not realistic to instantly switch risk status between every trade since you don't know if a trade is a win or loss until next day pre-market where you can now adjust risk % used depending on how previous day trades went. If that makes sense))
 
 ## 4. State Machine
 
@@ -69,7 +69,7 @@ This is a throttle: you start at full risk and only get throttled down after los
 Process each completed trade in chronological close order:
 
 #### If trade is Breakeven (pnl = 0)
-- Do nothing
+- Add + 1 to win counter/progress (new)
 
 #### If mode is HIGH
 - If trade is Loss:
@@ -87,7 +87,7 @@ Process each completed trade in chronological close order:
 - If trade is Loss:
   - Stay LOW
   - Reset `lowWinsProgress = 0` (wins must be earned again)
-  - (Breakeven remains ignored)
+  - (Breakeven adds + 1 to wins progress/counter)
 
 ### 4.4 Notes
 - This design makes LOW mode a “rebuild confidence” state.
@@ -151,9 +151,9 @@ Sequence:
 1) Start HIGH  
 2) Trade A: Win → remain HIGH  
 3) Trade B: Loss → switch to LOW, progress=0  
-4) Trade C: Breakeven → remain LOW, progress=0  
-5) Trade D: Win → remain LOW, progress=1  
-6) Trade E: Win → progress=2 ⇒ switch to HIGH, progress=0  
+4) Trade C: Breakeven → adds 1 to the win counter, progress=1  
+5) Trade D: Win → win counter = 2, switch to HIGH, progress=0 loss counter 
+6) Trade E: Loss → switch to LOW, progress=0  
 
 Result:
-- Next trade uses HIGH risk again.
+- Next trade uses LOW risk until win counter = 2.
